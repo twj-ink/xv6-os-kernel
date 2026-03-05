@@ -158,94 +158,94 @@ sys_trace(void)
   return 0;
 }
 
-// uint64
-// sys_shutdown(void)
-// {
-//   sbi_shutdown();
-//   return 0; // not reached
-// }
+uint64
+sys_shutdown(void)
+{
+  sbi_shutdown();
+  return 0; // not reached
+}
 
-// /*
-//  * @function: sys_times
-//  * @description: times()  stores  the current process 
-//  * times in the `struct tms` that `buf` points to.
-//  * @return:  `ticks` on success, (clock_t)-1 on failure.
-//  */
-// uint64
-// sys_times(void)
-// {
-//   struct proc *p = myproc();
-//   uint64 buf_addr;
+/*
+ * @function: sys_times
+ * @description: times()  stores  the current process 
+ * times in the `struct tms` that `buf` points to.
+ * @return:  `ticks` on success, (clock_t)-1 on failure.
+ */
+uint64
+sys_times(void)
+{
+  struct proc *p = myproc();
+  uint64 buf_addr;
 
-//   if (argaddr(0, &buf_addr) < 0) {
-//     return -1;
-//   }
+  if (argaddr(0, &buf_addr) < 0) {
+    return -1;
+  }
 
-//   struct tms tms;
-//   // fill the tms
-//   acquire(&p->lock);
-//   tms.tms_utime = p->proc_tms.tms_utime;
-//   tms.tms_stime = p->proc_tms.tms_stime;
-//   tms.tms_cutime = p->proc_tms.tms_cutime;
-//   tms.tms_cstime = p->proc_tms.tms_cstime;
-//   release(&p->lock);
+  struct tms tms;
+  // fill the tms
+  acquire(&p->lock);
+  tms.tms_utime = p->proc_tms.tms_utime;
+  tms.tms_stime = p->proc_tms.tms_stime;
+  tms.tms_cutime = p->proc_tms.tms_cutime;
+  tms.tms_cstime = p->proc_tms.tms_cstime;
+  release(&p->lock);
 
-//   // 获取全局ticks
-//   acquire(&tickslock);
-//   uint64 current_ticks = ticks;
-//   release(&tickslock);
+  // 获取全局ticks
+  acquire(&tickslock);
+  uint64 current_ticks = ticks;
+  release(&tickslock);
 
-//   // 复制结构体到buf中
-//   if (buf_addr != 0) {
-//     // int copyout2(uint64 dstva, char *src, uint64 len)
-//     if (copyout2(buf_addr, (char*) &tms, sizeof(tms)) < 0) {
-//       return -1;
-//     }
-//   }
+  // 复制结构体到buf中
+  if (buf_addr != 0) {
+    // int copyout2(uint64 dstva, char *src, uint64 len)
+    if (copyout2(buf_addr, (char*) &tms, sizeof(tms)) < 0) {
+      return -1;
+    }
+  }
 
-//   return current_ticks;
-// }
+  return current_ticks;
+}
 
-// /*
-//  * @function: sys_uname
-//  * @signature: int uname(struct utsname *buf);
-//  * @description: uname()  returns  system  information 
-//  *  in  the  structure pointed to by `buf`. 
-//  * @return: 0 on success, -1 on failure.
-//  */
-// uint64
-// sys_uname(void)
-// {
-//   struct utsname {
-//     char sysname[65];    /* Operating system name (e.g., "Linux") */
-//     char nodename[65];   /* Name within communications network
-//                             to which the node is attached, if any */
-//     char release[65];    /* Operating system release
-//                             (e.g., "2.6.28") */
-//     char version[65];    /* Operating system version */
-//     char machine[65];    /* Hardware type identifier */
-//     char domainname[65]; /* NIS or YP domain name */
-//   };
+/*
+ * @function: sys_uname
+ * @signature: int uname(struct utsname *buf);
+ * @description: uname()  returns  system  information 
+ *  in  the  structure pointed to by `buf`. 
+ * @return: 0 on success, -1 on failure.
+ */
+uint64
+sys_uname(void)
+{
+  struct utsname {
+    char sysname[65];    /* Operating system name (e.g., "Linux") */
+    char nodename[65];   /* Name within communications network
+                            to which the node is attached, if any */
+    char release[65];    /* Operating system release
+                            (e.g., "2.6.28") */
+    char version[65];    /* Operating system version */
+    char machine[65];    /* Hardware type identifier */
+    char domainname[65]; /* NIS or YP domain name */
+  };
 
-//   struct utsname info = {
-//     "xv6",
-//     "localhost",
-//     "1.0.0",
-//     "RISC-V #1",
-//     "riscv64",
-//     "localdomain"
-//   };
+  struct utsname info = {
+    "xv6",
+    "localhost",
+    "1.0.0",
+    "RISC-V #1",
+    "riscv64",
+    "localdomain"
+  };
 
-//   uint64 buf_addr;
-//   if (argaddr(0, &buf_addr) < 0) {
-//     return -1;
-//   }
+  uint64 buf_addr;
+  if (argaddr(0, &buf_addr) < 0) {
+    return -1;
+  }
   
-//   if (buf_addr != 0) {
-//     if (copyout2(buf_addr, (char*) &info, sizeof(info)) < 0) {
-//       return -1;
-//     }
-//   }
+  if (buf_addr != 0) {
+    if (copyout2(buf_addr, (char*) &info, sizeof(info)) < 0) {
+      return -1;
+    }
+  }
 
-//   return 0;
-// }
+  return 0;
+}

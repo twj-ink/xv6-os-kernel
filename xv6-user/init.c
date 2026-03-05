@@ -67,6 +67,6 @@ main(void)
       }
     }
   }
-  // shutdown();
+  shutdown();
   return 0;
 }

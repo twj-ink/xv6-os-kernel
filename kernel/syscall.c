@@ -117,9 +117,9 @@ extern uint64 sys_trace(void);
 extern uint64 sys_sysinfo(void);
 extern uint64 sys_rename(void);
 
-// extern uint64 sys_shutdown(void); // shutdown system call
-// extern uint64 sys_times(void); // times system call
-// extern uint64 sys_uname(void); // uname system call
+extern uint64 sys_shutdown(void); // shutdown system call
+extern uint64 sys_times(void); // times system call
+extern uint64 sys_uname(void); // uname system call
 
 
 static uint64 (*syscalls[])(void) = {
@@ -150,9 +150,9 @@ static uint64 (*syscalls[])(void) = {
   [SYS_sysinfo]     sys_sysinfo,
   [SYS_rename]      sys_rename,
 
-  // [SYS_shutdown]    sys_shutdown, // shutdown system call
-	// [SYS_times]       sys_times,
-	// [SYS_uname]       sys_uname,
+  [SYS_shutdown]    sys_shutdown, // shutdown system call
+	[SYS_times]       sys_times,
+	[SYS_uname]       sys_uname,
 
 };
 
@@ -184,9 +184,9 @@ static char *sysnames[] = {
   [SYS_sysinfo]     "sysinfo",
   [SYS_rename]      "rename",
 
-  // [SYS_shutdown]    "shutdown", // shutdown system call
-	// [SYS_times]       "times",
-	// [SYS_uname]       "uname",
+  [SYS_shutdown]    "shutdown", // shutdown system call
+	[SYS_times]       "times",
+	[SYS_uname]       "uname",
 
 
 };

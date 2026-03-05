@@ -44,6 +44,7 @@ main:
 .L2:
 	lw	a5,0(s4)
 	bgt	a5,s0,.L6
+	call	shutdown@plt
 	ld	ra,56(sp)
 	ld	s0,48(sp)
 	ld	s1,40(sp)

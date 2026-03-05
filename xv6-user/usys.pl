@@ -42,7 +42,7 @@ entry("trace");
 entry("sysinfo");
 entry("rename");
 
-# # 添加系统调用
-# entry("shutdown");
-# entry("times");
-# entry("uname");
+# 添加系统调用
+entry("shutdown");
+entry("times");
+entry("uname");

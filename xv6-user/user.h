@@ -37,9 +37,9 @@ int trace(int mask);
 int sysinfo(struct sysinfo *);
 int rename(char *old, char *new);
 
-// int shutdown(void); // shutdown system call
-// int times(struct tms *buf);
-// int uname(struct utsname *buf);
+int shutdown(void); // shutdown system call
+int times(struct tms *buf);
+int uname(struct utsname *buf);
 
 // ulib.c
 int stat(const char*, struct stat*);
