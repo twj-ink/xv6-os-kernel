@@ -4,7 +4,7 @@
 #include "include/param.h"
 #include "include/memlayout.h"
 #include "include/spinlock.h"
-#include "include/proc.h"
+#include "include/proc.h" // fork
 #include "include/syscall.h"
 #include "include/timer.h"
 #include "include/kalloc.h"
@@ -247,5 +247,16 @@ sys_uname(void)
     }
   }
 
+  return 0;
+}
+
+/*
+ * @function: sys_clone
+ * @description: 
+ * @return: 
+ */
+uint64
+sys_clone(void)
+{
   return 0;
 }

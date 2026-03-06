@@ -121,6 +121,8 @@ extern uint64 sys_shutdown(void); // shutdown system call
 extern uint64 sys_times(void); // times system call
 extern uint64 sys_uname(void); // uname system call
 
+extern uint64 sys_clone(void); // clone system call
+
 
 static uint64 (*syscalls[])(void) = {
   [SYS_fork]        sys_fork,
@@ -153,6 +155,8 @@ static uint64 (*syscalls[])(void) = {
   [SYS_shutdown]    sys_shutdown, // shutdown system call
 	[SYS_times]       sys_times,
 	[SYS_uname]       sys_uname,
+
+  [SYS_clone]       sys_clone,
 
 };
 
@@ -188,6 +192,7 @@ static char *sysnames[] = {
 	[SYS_times]       "times",
 	[SYS_uname]       "uname",
 
+  [SYS_clone]       "clone",
 
 };
 

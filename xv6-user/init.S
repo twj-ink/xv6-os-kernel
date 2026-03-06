@@ -99,16 +99,16 @@ main:
 	.string	"write"
 	.align	3
 .LC5:
-	.string	"getpid"
+	.string	"fork"
 	.align	3
 .LC6:
-	.string	"getcwd"
+	.string	"execve"
 	.align	3
 .LC7:
-	.string	"times"
+	.string	"exit"
 	.align	3
 .LC8:
-	.string	"uname"
+	.string	"wait"
 	.globl	argv
 	.data
 	.align	2

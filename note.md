@@ -965,4 +965,15 @@ sys_uname(void)
 }
 ```
 
-#
+# Part2
+
+## clone
+
+四部曲，第一步添加调用号160，第二步在下面详细说，第三步注册系统调用，第四步添加用户态接口。
+
+```c
+int clone(int (*fn)(void *_Nullable), void *stack, int flags,
+                void *_Nullable arg, ...  /* pid_t *_Nullable parent_tid,
+                                            void *_Nullable tls,
+                                            pid_t *_Nullable child_tid */ );
+```

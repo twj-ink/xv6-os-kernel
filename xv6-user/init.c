@@ -19,7 +19,11 @@ char *tests[] = {
   "times",
   "uname",
   /* 2 */
-
+  "fork",
+  "execve",
+  "exit",
+  // "clone",
+  "wait",
 };
 
 int cycles = sizeof(tests) / sizeof(tests[0]);
