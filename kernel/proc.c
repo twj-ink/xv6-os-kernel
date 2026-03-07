@@ -843,7 +843,7 @@ clone(void)
   int pid = fork();
   if (pid < 0)
     return -1;
-    
+
   struct proc *np;
 
   if(stack_addr != 0){
@@ -851,8 +851,8 @@ clone(void)
       acquire(&np->lock);
       if(np->pid == pid){
         np->trapframe->sp = stack_addr;
-        np->trapframe->epc = fn_addr;
-        np->trapframe->a1 = arg; // 将arg传递给子线程
+        // np->trapframe->epc = fn_addr;
+        // np->trapframe->a1 = arg; // 将arg传递给子线程
         release(&np->lock);
         break;
       }
