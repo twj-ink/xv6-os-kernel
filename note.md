@@ -502,6 +502,22 @@ void syscall(void) {
 执行流程是：用户态调用系统调用时，CPU切换到内核模式，进入`usertrap()`，其中会调用`syscall()`；在`syscall()`中首先从寄存器`a7`中获取系统调用号，然后通过查表找到对应的处理函数并执行；如果启用了跟踪功能，还会打印系统调用的名称和返回值；如果系统调用号无效，则打印错误信息并返回-1。
 
 
+# kernel/proc.h/.c
+
+在这里定义了进程结构体`struct proc`，以及与进程管理有关的函数。可以理解为：`一个进程 = struct proc + 用户地址空间 + 内核栈`。在结构体中有一些重要的字段比如：
+
+* 并发控制
+  * `struct spinlock lock`：自旋锁，原因是xv6是多核系统，多个cpu可能同时访问同一个进程结构，所以需要锁来保护进程结构的访问。具体操作方式是`acquire(&p->lock)`来获取锁，`release(&p->lock)`来释放锁。
+* 进程调度相关（需要持有p->lock）
+  * `state`：进程状态，如`RUNNING`, `ZOMBIE`等等
+  * `parent`：父进程的指针
+* 进程私有数据（不需要p->lock，只有cpu访问）
+  * `uint64 kstack`：每个进程**独立的内核栈**的地址
+  * `uint64 sz`：用户虚拟地址空间的地址大小
+  * `pagetable` & `kpagetable`：用户和内核的地址空间页表。在`fork`的时候使用`uvmcopy()`来复制父进程的用户地址空间。
+  * `trapframe`：保存用户寄存器。在返回用户态时使用`usertrapret()`来恢复。
+  * `context`：保存内核寄存器。
+
 # shutdown
 1. 添加系统调用号
 在`kernel/include/sysnum.h`中添加：

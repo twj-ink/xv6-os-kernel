@@ -252,11 +252,43 @@ sys_uname(void)
 
 /*
  * @function: sys_clone
- * @description: 
- * @return: 
+ * @description: int clone(int (*fn)(void *_Nullable), void *stack, int flags, void *_Nullable arg, ...)
+ * @return: -1 on failure, the thread ID of the child thread on success.
  */
 uint64
 sys_clone(void)
 {
-  return 0;
+  return clone();
+}
+
+uint64 
+sys_wait4(void)
+{
+  // printf("sys_wait4 called\n");
+  int wanted_pid, options;
+  uint64 status, rusage;
+  int child_status;
+  int ret;
+
+  if(argint(0, &wanted_pid) < 0 || argaddr(1, &status) < 0 ||
+     argint(2, &options) < 0 || argaddr(3, &rusage) < 0)
+    return -1;
+
+  (void)wanted_pid;
+  (void)rusage;
+  if(options != 0)
+    return -1;
+
+  ret = wait(status);
+  if(ret < 0)
+    return -1;
+
+  if(status != 0){
+    if(copyin2((char *)&child_status, status, sizeof(child_status)) < 0)
+      return -1;
+    child_status = (child_status & 0xff) << 8;
+    if(copyout2(status, (char *)&child_status, sizeof(child_status)) < 0)
+      return -1;
+  }
+  return ret;
 }

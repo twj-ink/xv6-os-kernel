@@ -5,7 +5,7 @@
 	.section	.rodata.str1.8,"aMS",@progbits,1
 	.align	3
 .LC0:
-	.string	"\ninit: starting to test [%s]\n"
+	.string	"\n[%s]\n"
 	.align	3
 .LC1:
 	.string	"init: fork failed\n"
@@ -99,15 +99,30 @@ main:
 	.string	"write"
 	.align	3
 .LC5:
-	.string	"fork"
+	.string	"getpid"
 	.align	3
 .LC6:
-	.string	"execve"
+	.string	"getcwd"
 	.align	3
 .LC7:
-	.string	"exit"
+	.string	"times"
 	.align	3
 .LC8:
+	.string	"uname"
+	.align	3
+.LC9:
+	.string	"fork"
+	.align	3
+.LC10:
+	.string	"execve"
+	.align	3
+.LC11:
+	.string	"exit"
+	.align	3
+.LC12:
+	.string	"clone"
+	.align	3
+.LC13:
 	.string	"wait"
 	.globl	argv
 	.data
@@ -116,7 +131,7 @@ main:
 	.type	cycles, @object
 	.size	cycles, 4
 cycles:
-	.word	5
+	.word	10
 	.bss
 	.align	3
 	.set	.LANCHOR1,. + 0
@@ -128,12 +143,17 @@ argv:
 	.align	3
 	.set	.LANCHOR0,. + 0
 	.type	tests, @object
-	.size	tests, 40
+	.size	tests, 80
 tests:
 	.dword	.LC4
 	.dword	.LC5
 	.dword	.LC6
 	.dword	.LC7
 	.dword	.LC8
+	.dword	.LC9
+	.dword	.LC10
+	.dword	.LC11
+	.dword	.LC12
+	.dword	.LC13
 	.ident	"GCC: (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0"
 	.section	.note.GNU-stack,"",@progbits

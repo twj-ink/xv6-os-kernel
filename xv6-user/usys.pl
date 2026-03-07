@@ -48,3 +48,4 @@ entry("times");
 entry("uname");
 
 entry("clone");
+entry("wait4");

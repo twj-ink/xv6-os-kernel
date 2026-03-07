@@ -22,8 +22,9 @@ char *tests[] = {
   "fork",
   "execve",
   "exit",
-  // "clone",
+  "clone",
   "wait",
+  // "waitpid",
 };
 
 int cycles = sizeof(tests) / sizeof(tests[0]);
@@ -43,7 +44,7 @@ main(void)
   dup(0);  // stderr
 
   for(int i = 0; i < cycles; i++){
-    printf("\ninit: starting to test [%s]\n", tests[i]);
+    printf("\n[%s]\n", tests[i]);
     pid = fork();
     if(pid < 0){
       printf("init: fork failed\n");

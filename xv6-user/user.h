@@ -40,6 +40,8 @@ int rename(char *old, char *new);
 int shutdown(void); // shutdown system call
 int times(struct tms *buf);
 int uname(struct utsname *buf);
+int clone(void);
+// int wait4(int *status, int options, struct rusage *rusage);
 
 // ulib.c
 int stat(const char*, struct stat*);

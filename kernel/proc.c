@@ -14,6 +14,8 @@
 #include "include/trap.h"
 #include "include/vm.h"
 
+#include "include/syscall.h"
+
 
 struct cpu cpus[NCPU];
 
@@ -824,3 +826,39 @@ procnum(void)
   return num;
 }
 
+/*
+ * @function: sys_clone
+ * @description: int clone(int (*fn)(void *_Nullable), void *stack, int flags, void *_Nullable arg, ...)
+ * @return: -1 on failure, the thread ID of the child thread on success.
+ */
+int 
+clone(void)
+{
+  uint64 fn_addr, stack_addr, arg;
+  int flags;
+  if (argaddr(0, &fn_addr) < 0 || argaddr(1, &stack_addr) < 0 || argint(2, &flags) < 0 || argaddr(3, &arg) < 0) {
+    return -1;
+  }
+
+  int pid = fork();
+  if (pid < 0)
+    return -1;
+    
+  struct proc *np;
+
+  if(stack_addr != 0){
+    for(np = proc; np < &proc[NPROC]; np++){
+      acquire(&np->lock);
+      if(np->pid == pid){
+        np->trapframe->sp = stack_addr;
+        np->trapframe->epc = fn_addr;
+        np->trapframe->a1 = arg; // 将arg传递给子线程
+        release(&np->lock);
+        break;
+      }
+      release(&np->lock);
+    }
+  }
+
+  return pid;
+}

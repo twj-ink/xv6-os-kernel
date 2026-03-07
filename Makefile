@@ -253,16 +253,10 @@ local:
 	@$(MAKE) fs
 	@$(MAKE) run
 
-# QEMUOPTS_GDB = $(QEMUOPTS) -S -s
+QEMUOPTS_GDB = $(QEMUOPTS) -S -gdb tcp::1234,server,nowait
 
-# gdb: build .gdbinit
-# 	@echo "====== Running QEMU with GDB support... ======"
-# 	@echo "In another terminal, run: 'gdb-multiarch $(T)/kernel', then type 'c' to continue"
-# 	@echo "=============================================="
-# 	@$(QEMU) $(QEMUOPTS_GDB)
-
-# .gdbinit:
-# 	@echo "target remote localhost:1234" > .gdbinit
-# 	@echo "set architecture riscv:rv64" >> .gdbinit
-# 	@echo "symbol-file $(T)/kernel" >> .gdbinit
-# 	@echo "set auto-load safe-path /xv6" > ~/.gdbinit
+gdb: build
+	@echo "====== Running QEMU with GDB support... ======"
+	@echo "In another terminal, run: 'gdb-multiarch target/kernel', then type 'c' to continue"
+	@echo "=============================================="
+	$(QEMU) $(QEMUOPTS_GDB)

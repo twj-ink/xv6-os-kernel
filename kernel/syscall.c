@@ -122,6 +122,7 @@ extern uint64 sys_times(void); // times system call
 extern uint64 sys_uname(void); // uname system call
 
 extern uint64 sys_clone(void); // clone system call
+extern uint64 sys_wait4(void); // wait4 system call
 
 
 static uint64 (*syscalls[])(void) = {
@@ -157,6 +158,7 @@ static uint64 (*syscalls[])(void) = {
 	[SYS_uname]       sys_uname,
 
   [SYS_clone]       sys_clone,
+  [SYS_wait4]       sys_wait4,
 
 };
 
@@ -193,6 +195,7 @@ static char *sysnames[] = {
 	[SYS_uname]       "uname",
 
   [SYS_clone]       "clone",
+  [SYS_wait4]       "wait4",
 
 };
 
