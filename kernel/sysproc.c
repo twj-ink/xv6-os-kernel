@@ -292,3 +292,25 @@ sys_wait4(void)
   }
   return ret;
 }
+
+//        int brk(void *addr);
+uint64
+sys_brk(void)
+{
+  int addr;
+
+  if(argint(0, &addr) < 0)
+    return -1;
+  
+  // brk(0)获取当前堆顶地址
+  if (addr == 0) {
+    return sys_sbrk();
+  } else {
+    // sets the end of the data segment to the value specified by addr
+    // 也即改变了 addr - curr_sz
+    uint64 curr_sz = myproc()->sz;
+    if(growproc((uint64)addr - curr_sz) < 0)
+      return -1;
+    return addr;
+  }
+}

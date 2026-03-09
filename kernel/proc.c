@@ -840,6 +840,9 @@ clone(void)
     return -1;
   }
 
+  // printf("[From args] \n\tfn_addr: %p,\n\tstack_addr: %p,\n\tflags: %d,\n\targ: %p\n",
+    // fn_addr, stack_addr, flags, arg);
+
   int pid = fork();
   if (pid < 0)
     return -1;
@@ -851,8 +854,9 @@ clone(void)
       acquire(&np->lock);
       if(np->pid == pid){
         np->trapframe->sp = stack_addr;
-        // np->trapframe->epc = fn_addr;
-        // np->trapframe->a1 = arg; // 将arg传递给子线程
+        /* 下面这两行注释掉，也是正确的 */
+        np->trapframe->epc = *(uint64*)stack_addr;
+        np->trapframe->a1 = *((uint64*)stack_addr+1);
         release(&np->lock);
         break;
       }

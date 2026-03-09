@@ -49,3 +49,5 @@ entry("uname");
 
 entry("clone");
 entry("wait4");
+
+entry("brk");

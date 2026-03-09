@@ -24,7 +24,15 @@ char *tests[] = {
   "exit",
   "clone",
   "wait",
+
   // "waitpid",
+  // "getppid",
+  // "yield",
+  // "sleep",
+  // "gettimeofday",
+
+  /* 3 */
+  "brk",
 };
 
 int cycles = sizeof(tests) / sizeof(tests[0]);
