@@ -4,7 +4,7 @@
 #include "include/param.h"
 #include "include/memlayout.h"
 #include "include/spinlock.h"
-#include "include/proc.h" // fork
+#include "include/proc.h" // fork, yield
 #include "include/syscall.h"
 #include "include/timer.h"
 #include "include/kalloc.h"
@@ -293,7 +293,128 @@ sys_wait4(void)
   return ret;
 }
 
-//        int brk(void *addr);
+
+// proc.c: void yield(void)
+uint64
+sys_sched_yield(void)
+{
+  // error: void value not ignored as it ought to be
+  //   301 |   return yield();
+  /*  return yield();  */
+
+  yield();
+  return 0;
+}
+
+
+uint64
+sys_getppid(void)
+{
+  return myproc()->parent->pid;
+}
+
+
+#define TIMEBASE_FREQ           10000000ULL  // from RustSBI-Qemu's doc
+#define USEC_PER_TICK           5000ULL   // timer interval(ticks_per_usec) is 200Hz
+// return 0 on success, and -1 on failure
+uint64
+sys_gettimeofday(void)
+{
+  uint64 tv_addr;
+  struct timeval tv;
+
+  if(argaddr(0, &tv_addr) < 0)
+    return -1;
+
+  uint64 curr = r_time(); // 从开机到现在，一共走了多少的ticks
+  // timebase_freq = r_time() / 秒数 
+  // 所以 1 tick = 1 / timebase_freq 秒
+  // 现在有 curr ticks
+  tv.tv_sec = curr / TIMEBASE_FREQ; // 从开机到现在的秒数
+  tv.tv_usec = (curr % TIMEBASE_FREQ) * 1000000 / TIMEBASE_FREQ; // 当前秒内的微秒数
+
+  if (copyout2(tv_addr, (char*)&tv, sizeof(tv)) < 0) {
+    return -1;
+  }
+
+  return 0;
+}
+
+/*
+// Atomically release lock and sleep on chan.
+// Reacquires lock when awakened.
+void
+sleep(void *chan, struct spinlock *lk)
+{
+  struct proc *p = myproc();
+  
+  // Must acquire p->lock in order to
+  // change p->state and then call sched.
+  // Once we hold p->lock, we can be
+  // guaranteed that we won't miss any wakeup
+  // (wakeup locks p->lock),
+  // so it's okay to release lk.
+  if(lk != &p->lock){  //DOC: sleeplock0
+    acquire(&p->lock);  //DOC: sleeplock1
+    release(lk);
+  }
+
+  // Go to sleep.
+  p->chan = chan;
+  p->state = SLEEPING;
+
+  sched();
+
+  // Tidy up.
+  p->chan = 0;
+
+  // Reacquire original lock.
+  if(lk != &p->lock){
+    release(&p->lock);
+    acquire(lk);
+  }
+}
+*/
+
+/*
+       int nanosleep(const struct timespec *duration,
+                     struct timespec *_Nullable rem);
+*/
+uint64
+sys_nanosleep(void)
+{
+  uint64 dur_addr, rem_addr;
+  struct timespec ts;
+  
+  if (argaddr(0, &dur_addr) < 0 || argaddr(1, &rem_addr) < 0) {
+    return -1;
+  } 
+
+  // 获取传入的要睡眠的时间
+  if (copyin2((char*)&ts, dur_addr, sizeof(ts)) < 0) {
+    return -1;
+  }
+
+  // 计算总时间，单位是微秒
+  uint64 usec_total = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+  // 转换成ticks
+  uint64 ticks_total = usec_total / USEC_PER_TICK;
+
+  // 调用sleep来实现ticks数的流逝
+  acquire(&tickslock);
+
+  uint64 ticks_start = ticks;
+  while (ticks - ticks_start < ticks_total) {
+    sleep(&ticks, &tickslock);
+    // sleep(void*, struct spinlock*)
+  }
+
+  release(&tickslock);
+  return 0;
+}
+
+
+// int brk(void *addr);
 uint64
 sys_brk(void)
 {
@@ -314,3 +435,4 @@ sys_brk(void)
     return addr;
   }
 }
+

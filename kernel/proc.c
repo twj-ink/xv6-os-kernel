@@ -854,9 +854,9 @@ clone(void)
       acquire(&np->lock);
       if(np->pid == pid){
         np->trapframe->sp = stack_addr;
-        /* 下面这两行注释掉，也是正确的 */
-        np->trapframe->epc = *(uint64*)stack_addr;
-        np->trapframe->a1 = *((uint64*)stack_addr+1);
+        // /* 下面这两行注释掉，也是正确的 */
+        // np->trapframe->epc = *(uint64*)stack_addr;
+        // np->trapframe->a1 = *((uint64*)stack_addr+1);
         release(&np->lock);
         break;
       }

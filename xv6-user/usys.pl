@@ -49,5 +49,9 @@ entry("uname");
 
 entry("clone");
 entry("wait4");
+entry("sched_yield");
+entry("getppid");
+entry("gettimeofday");
+entry("nanosleep");
 
 entry("brk");

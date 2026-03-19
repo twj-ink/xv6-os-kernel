@@ -518,6 +518,11 @@ void syscall(void) {
   * `trapframe`：保存用户寄存器。在返回用户态时使用`usertrapret()`来恢复。
   * `context`：保存内核寄存器。
 
+其中`trapframe`中有两类信息：
+* 用户态上下文：
+  * epc：用户程序计数器，保存了触发系统调用的指令地址。在返回的时候，会从这个地方继续执行。
+  * sp：用户栈指针，指向用户栈的栈顶。
+
 # shutdown
 1. 添加系统调用号
 在`kernel/include/sysnum.h`中添加：
@@ -983,6 +988,16 @@ sys_uname(void)
 
 # Part2
 
+这一部分里面需要先实现`wait4`和`clone`这俩，因为`fork`,`exit`,`wait`都依赖于这俩。
+
+## wait4
+
+```c
+pid_t wait4(pid_t pid, int *_Nullable wstatus, int options,
+            struct rusage *_Nullable rusage);
+```
+
+
 ## clone
 
 四部曲，第一步添加调用号160，第二步在下面详细说，第三步注册系统调用，第四步添加用户态接口。
@@ -993,3 +1008,11 @@ int clone(int (*fn)(void *_Nullable), void *stack, int flags,
                                             void *_Nullable tls,
                                             pid_t *_Nullable child_tid */ );
 ```
+
+## gettimeofday & sleep
+
+## 时钟相关
+
+
+
+在`kernel/trap.c`中，会对计时器中断进行处理，调用`kernel/timer.c`中的`timer_tick()`，在该函数中会`ticks++`和`wakeup(&ticks)`，所以选择使用`&ticks`来作为**是否唤醒该线程的标志**。

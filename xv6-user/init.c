@@ -24,14 +24,13 @@ char *tests[] = {
   "exit",
   "clone",
   "wait",
+  "yield",
+  "waitpid",
+  "getppid",
+  "sleep",
+  "gettimeofday",
 
-  // "waitpid",
-  // "getppid",
-  // "yield",
-  // "sleep",
-  // "gettimeofday",
-
-  /* 3 */
+  // /* 3 */
   "brk",
 };
 

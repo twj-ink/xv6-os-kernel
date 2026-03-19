@@ -123,6 +123,11 @@ extern uint64 sys_uname(void); // uname system call
 
 extern uint64 sys_clone(void); // clone system call
 extern uint64 sys_wait4(void); // wait4 system call
+extern uint64 sys_sched_yield(void);
+extern uint64 sys_getppid(void);
+extern uint64 sys_gettimeofday(void);
+extern uint64 sys_nanosleep(void);
+
 
 extern uint64 sys_brk(void); // brk system call
 
@@ -161,6 +166,10 @@ static uint64 (*syscalls[])(void) = {
 
   [SYS_clone]       sys_clone,
   [SYS_wait4]       sys_wait4,
+  [SYS_sched_yield] sys_sched_yield,
+  [SYS_getppid]     sys_getppid,
+  [SYS_gettimeofday] sys_gettimeofday,
+  [SYS_nanosleep]   sys_nanosleep,
 
   [SYS_brk]         sys_brk,
 
@@ -200,6 +209,11 @@ static char *sysnames[] = {
 
   [SYS_clone]       "clone",
   [SYS_wait4]       "wait4",
+  [SYS_sched_yield] "sched_yield",
+  [SYS_getppid]     "getppid",
+  [SYS_gettimeofday] "gettimeofday",
+  [SYS_nanosleep]   "nanosleep",
+
 
   [SYS_brk]         "brk",
 
