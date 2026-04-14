@@ -10,6 +10,8 @@
 #include "trap.h"
 #include "timer.h"
 
+#include "vm.h"
+
 // Saved registers for kernel context switches.
 struct context {
   uint64 ra;
@@ -74,6 +76,10 @@ struct proc {
   struct dirent *cwd;          // Current directory
   char name[16];               // Process name (debugging)
   int tmask;                    // trace mask
+
+  /* vm */
+  struct vm_area vma[MAX_VMA];  // VMA数组
+  int vma_count;                // 已使用的VMA数量
 };
 
 void            reg_info(void);

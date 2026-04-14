@@ -1016,3 +1016,8 @@ int clone(int (*fn)(void *_Nullable), void *stack, int flags,
 
 
 在`kernel/trap.c`中，会对计时器中断进行处理，调用`kernel/timer.c`中的`timer_tick()`，在该函数中会`ticks++`和`wakeup(&ticks)`，所以选择使用`&ticks`来作为**是否唤醒该线程的标志**。
+
+
+# PART3
+
+在vm.h中定义vm_area，在proc.h中对proc添加vma数组和用户页表。

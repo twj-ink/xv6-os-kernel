@@ -214,6 +214,61 @@ sys_open(void)
   return fd;
 }
 
+// Linux test flags/layouts used in testsuits-for-oskernel.
+#define LINUX_O_WRONLY          0x001
+#define LINUX_O_RDWR            0x002
+#define LINUX_O_CREAT           0x040
+#define LINUX_O_TRUNC           0x200
+#define LINUX_O_APPEND          0x400
+
+
+int
+linux_open_flags_to_xv6(int flags)
+{
+  int out = O_RDONLY;
+
+  if(flags & LINUX_O_RDWR)
+    out = O_RDWR;
+  else if(flags & LINUX_O_WRONLY)
+    out = O_WRONLY;
+
+  if(flags & LINUX_O_CREAT)
+    out |= O_CREATE;
+  if(flags & LINUX_O_TRUNC)
+    out |= O_TRUNC;
+  if(flags & LINUX_O_APPEND)
+    out |= O_APPEND;
+
+  return out;
+}
+
+
+uint64
+sys_openat(void)
+{
+  int dirfd, flags;
+  uint64 path, mode;
+  uint64 old_a0, old_a1, ret;
+  struct proc *p = myproc();
+
+  if(argint(0, &dirfd) < 0 || argaddr(1, &path) < 0 ||
+     argint(2, &flags) < 0 || argaddr(3, &mode) < 0)
+    return -1;
+
+  (void)dirfd;
+  (void)mode;
+
+  old_a0 = p->trapframe->a0;
+  old_a1 = p->trapframe->a1;
+  p->trapframe->a0 = path;
+  p->trapframe->a1 = linux_open_flags_to_xv6(flags);
+  ret = sys_open();
+  p->trapframe->a0 = old_a0;
+  p->trapframe->a1 = old_a1;
+  return ret;
+}
+
+
 uint64
 sys_mkdir(void)
 {
@@ -543,4 +598,72 @@ fail:
   if (src)
     eput(src);
   return -1;
+}
+
+/*
+ * 从proc->ofile[fd]中获得当前打开文件的file结构
+ */
+int
+fd_get(int fd, struct file **pf)
+{
+  struct proc *p = myproc();
+
+  if (fd < 0 || fd >= NOFILE || p->ofile[fd] == 0) return -1;
+  *pf = p->ofile[fd];
+  return 0;
+}
+
+uint64
+sys_mmap(void)
+{
+  uint64 start, len, off;
+  int prot, flags, fd;
+  struct proc *p = myproc();
+  struct file *f;
+  struct vm_area *vma;
+
+  if(argaddr(0, &start) < 0 || argaddr(1, &len) < 0 ||
+     argint(2, &prot) < 0 || argint(3, &flags) < 0 ||
+     argint(4, &fd) < 0 || argaddr(5, &off) < 0)
+    return -1;
+
+  start = PGROUNDUP(start);
+
+  if (len == 0) return -1;
+  if (off % PGSIZE != 0) return -1;
+
+  // 如果是匿名映射
+  if (flags & MAP_ANONYMOUS) {
+    // offset应该是0
+    if (off != 0) return -1;
+  } else {
+    // 关联到一个文件
+    if (fd_get(fd, &f) != 0) return -1;
+    // 现在已经有file *f了
+    if (f->type != FD_ENTRY) return -1;
+  }
+
+  // 寻找一个可用的VMA
+  vma = alloc_vma(p);
+  if (vma == NULL) return -1;
+  // 初始化vma
+  vma->start = start;
+  vma->end = start + len;
+  vma->prot = prot;
+  vma->flags = flags;
+  vma->offset = off;
+  if (!(flags & MAP_ANONYMOUS)) {
+    // 处理文件计数
+    vma->file = f;
+    filedup(f); // 增加引用计数
+  } else {
+    vma->file = NULL;
+  }
+  return start;
+}
+
+uint64
+sys_munmap(void)
+{
+  return 0;
 }

@@ -174,6 +174,12 @@ found:
   p->pending_cutime = 0;
   p->pending_cstime = 0;
 
+  /* 初始化vma */
+  for (int i = 0; i < MAX_VMA; i++) {
+    p->vma[i].used = 0;
+    p->vma[i].file = NULL;
+  }
+  p->vma_count = 0;
 
   return p;
 }
@@ -202,6 +208,15 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+
+  /* vma */
+  for (int i = 0; i < MAX_VMA; i++) {
+    if (p->vma[i].used && p->vma[i].file) {
+      fileclose(p->vma[i].file);
+    }
+    p->vma[i].used = 0;
+  }
+  p->vma_count = 0;
 }
 
 // Create a user page table for a given process,
@@ -395,6 +410,17 @@ fork(void)
   np->pending_cutime = 0;
   np->pending_cstime = 0;
 
+  /* vma */
+  for (int i = 0; i < MAX_VMA; i++) {
+    if (p->vma[i].used) {
+      np->vma[i] = p->vma[i];
+      if (np->vma[i].file) {
+        filedup(np->vma[i].file);
+      }
+      np->vma_count++;
+    }
+  }
+
   release(&np->lock);
 
   return pid;
@@ -446,6 +472,31 @@ exit(int status)
     }
   }
 
+  /* sys_times */
+  p->pending_cutime = p->proc_tms.tms_utime + p->proc_tms.tms_cutime;
+  p->pending_cstime = p->proc_tms.tms_stime + p->proc_tms.tms_cstime;
+
+  /* vma */
+  for (int i = 0; i < MAX_VMA; i++) {
+    if (p->vma[i].used) {
+      uint64 addr = p->vma[i].start;
+      uint64 len = p->vma[i].end - p->vma[i].start;
+      
+      // 释放物理内存
+      for (uint64 a = addr; a < addr + len; a += PGSIZE) {
+        vmunmap(p->pagetable, a, 1, 0);
+      }
+    }
+      
+    // 释放文件引用
+    if (p->vma[i].file) {
+        fileclose(p->vma[i].file);
+    }
+    p->vma[i].used = 0;
+  }
+  p->vma_count = 0;
+
+
   eput(p->cwd);
   p->cwd = 0;
 
@@ -480,12 +531,12 @@ exit(int status)
   // Parent might be sleeping in wait().
   wakeup1(original_parent);
 
+
+
   p->xstate = status;
   p->state = ZOMBIE;
 
-  /* sys_times */
-  p->pending_cutime = p->proc_tms.tms_utime + p->proc_tms.tms_cutime;
-  p->pending_cstime = p->proc_tms.tms_stime + p->proc_tms.tms_cstime;
+
 
   release(&original_parent->lock);
 

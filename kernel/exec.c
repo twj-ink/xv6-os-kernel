@@ -157,10 +157,27 @@ int exec(char *path, char **argv)
   p->sz = sz;
   p->trapframe->epc = elf.entry;  // initial program counter = main
   p->trapframe->sp = sp; // initial stack pointer
+
+  /* vma */
+  for (int i = 0; i < MAX_VMA; i++) {
+    if (p->vma[i].used) {
+        // 释放文件引用
+        if (p->vma[i].file) {
+            fileclose(p->vma[i].file);
+        }
+        // 标记为未使用
+        p->vma[i].used = 0;
+    }
+  }
+  p->vma_count = 0;
+
   proc_freepagetable(oldpagetable, oldsz);
   w_satp(MAKE_SATP(p->kpagetable));
   sfence_vma();
   kvmfree(oldkpagetable, 0);
+
+
+
   return argc; // this ends up in a0, the first argument to main(argc, argv)
 
  bad:

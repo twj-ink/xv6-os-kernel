@@ -13,6 +13,8 @@
 #include "include/timer.h"
 #include "include/disk.h"
 
+#include "include/vm.h"
+
 extern char trampoline[], uservec[], userret[];
 
 // in kernelvec.S, calls kerneltrap().
@@ -65,6 +67,18 @@ usertrap(void)
   // save user program counter.
   p->trapframe->epc = r_sepc();
   
+/* 缺页异常 */
+// 13 load ; 15 store
+  if (r_scause() == 15 || r_scause() == 13) {
+    printf("page fault!!! scause: %d\n", r_scause());
+    uint64 va = r_stval(); //触发异常的虚拟地址
+    uint64 cause = r_scause();
+    if (handle_page_fault(p, va, cause) < 0) {
+      printf("page fault at addr: %d, cause: %d\n", va, cause);
+      exit(-1);
+    }
+  }
+
   if(r_scause() == 8){
     // system call
     if(p->killed)

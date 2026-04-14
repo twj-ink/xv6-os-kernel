@@ -234,7 +234,8 @@ vmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     if((pte = walk(pagetable, a, 0)) == 0)
       panic("vmunmap: walk");
     if((*pte & PTE_V) == 0)
-      panic("vmunmap: not mapped");
+      // panic("vmunmap: not mapped");
+      continue;
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("vmunmap: not a leaf");
     if(do_free){
@@ -647,4 +648,80 @@ void vmprint(pagetable_t pagetable)
     }
   }
   return;
+}
+
+
+// 查找包含进程所需的虚拟地址的vma
+struct vm_area* 
+find_vma(struct proc *p, uint64 addr) 
+{
+  for (int i = 0; i < p->vma_count; i++) {
+    struct vm_area *vma = &p->vma[i];
+    if (vma->used && vma->start <= addr && addr < vma->end) {
+      return vma;
+    }
+  }
+  return NULL;
+}
+
+struct vm_area* 
+alloc_vma(struct proc *p)
+{
+  if (p->vma_count >= MAX_VMA) {
+    return NULL;
+  }
+  for (int i = 0; i < MAX_VMA; i++) {
+    if (!p->vma[i].used) {
+      p->vma[i].used = 1;
+      p->vma_count++;
+      return &p->vma[i];
+    }
+  }
+  return NULL;
+}
+
+int
+handle_page_fault(struct proc *p, uint64 va, int cause)
+{
+  struct vm_area *vma = find_vma(p, va);
+  if (vma == NULL) {
+    return -1;
+  }
+  if ((cause == 13 && !(vma->prot & PROT_WRITE)) || (cause == 15 && !(vma->prot & PROT_EXEC))) {
+    return -1;
+  }
+
+  uint64 pa = walkaddr(p->kpagetable, va);
+  if (pa != NULL) {
+    return -1;
+  }
+
+  char *mem = kalloc();
+  if (mem == NULL) {
+    return -1;
+  }
+  memset(mem, 0, PGSIZE);
+
+  uint64 perm = PTE_U | PTE_V;
+  if (vma->prot & PROT_READ) perm |= PTE_R;
+  if (vma->prot & PROT_WRITE) perm |= PTE_W;
+  if (vma->prot & PROT_EXEC) perm |= PTE_X;
+
+  if (mappages(p->kpagetable, PGROUNDDOWN(va), PGSIZE, (uint64)mem, perm) != 0) {
+    kfree(mem);
+    return -1;
+  }
+  
+  if (vma->file != NULL) {
+
+    elock(vma->file->ep);
+    // 计算文件内的偏移量：VMA 文件偏移 + 页在 VMA 内的偏移
+    uint64 file_offset = vma->offset + (PGROUNDDOWN(va) - vma->start);
+    // 从文件读取一页内容到内核地址 mem
+    eread(vma->file->ep, 0, (uint64)mem, file_offset, PGSIZE);
+    eunlock(vma->file->ep);
+
+    }
+
+  return 0;
 }

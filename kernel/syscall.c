@@ -128,8 +128,11 @@ extern uint64 sys_getppid(void);
 extern uint64 sys_gettimeofday(void);
 extern uint64 sys_nanosleep(void);
 
+extern uint64 sys_openat(void);
 
 extern uint64 sys_brk(void); // brk system call
+extern uint64 sys_mmap(void);
+extern uint64 sys_munmap(void);
 
 
 static uint64 (*syscalls[])(void) = {
@@ -171,7 +174,11 @@ static uint64 (*syscalls[])(void) = {
   [SYS_gettimeofday] sys_gettimeofday,
   [SYS_nanosleep]   sys_nanosleep,
 
+  [SYS_openat]        sys_openat,
+
   [SYS_brk]         sys_brk,
+  [SYS_mmap]        sys_mmap,
+  [SYS_munmap]      sys_munmap,
 
 };
 
@@ -214,8 +221,11 @@ static char *sysnames[] = {
   [SYS_gettimeofday] "gettimeofday",
   [SYS_nanosleep]   "nanosleep",
 
+  [SYS_openat]       "openat",
 
   [SYS_brk]         "brk",
+  [SYS_mmap]        "mmap",
+  [SYS_munmap]      "munmap",
 
 };
 

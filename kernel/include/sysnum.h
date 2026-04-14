@@ -5,7 +5,8 @@
 
 
 // Filesystem related (文件系统相关)
-#define SYS_open        56   // 打开文件
+#define SYS_open        55 
+#define SYS_openat      56   // 打开文件
 #define SYS_close       57   // 关闭文件
 #define SYS_read        63   // 从文件读取数据
 #define SYS_write       64   // 向文件写入数据
@@ -22,7 +23,6 @@
 #define SYS_remove      117  // 删除文件或目录
 #define SYS_unlinkat    35   // 在指定目录下删除文件
 #define SYS_dev         21   // 设备文件操作
-
 
 // Process management related (进程管理相关)
 #define SYS_fork         1   // 创建子进程
@@ -43,6 +43,8 @@
 // Memory management related (内存管理相关)
 #define SYS_sbrk        12   // 调整程序数据段（堆）的大小
 #define SYS_brk        214   // 直接设置程序数据段的结束地址
+#define SYS_mmap       222
+#define SYS_munmap     215
 
 
 // Others (其他)

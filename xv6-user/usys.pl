@@ -55,3 +55,5 @@ entry("gettimeofday");
 entry("nanosleep");
 
 entry("brk");
+entry("mmap");
+entry("munmap");
