@@ -627,6 +627,18 @@ sys_mmap(void)
      argint(4, &fd) < 0 || argaddr(5, &off) < 0)
     return -1;
 
+  // [WARNING #1] addr = 0
+
+  // If  addr  is  NULL, then the kernel chooses the (page-aligned) address 
+  // at which to create the mapping; this is
+  // the most portable method of creating a new mapping.
+  if (start == 0) {
+    // 直接选择进程的末尾
+    start = p->sz;
+  }
+  // If addr is not NULL, then the kernel takes it as  a  hint
+  // about  where  to place the mapping; 
+  // on Linux, the kernel will pick a nearby page boundary 
   start = PGROUNDUP(start);
 
   if (len == 0) return -1;
@@ -643,10 +655,10 @@ sys_mmap(void)
     if (f->type != FD_ENTRY) return -1;
   }
 
-  // 寻找一个可用的VMA
+  // 1. 申请一个 vm_area_struct 结构（vma），内核使用 vma 来管理进程的虚拟内存地址
   vma = alloc_vma(p);
   if (vma == NULL) return -1;
-  // 初始化vma
+  // 2. 设置 vma 结构各个字段的值。
   vma->start = start;
   vma->end = start + len;
   vma->prot = prot;
@@ -659,6 +671,7 @@ sys_mmap(void)
   } else {
     vma->file = NULL;
   }
+
   return start;
 }
 

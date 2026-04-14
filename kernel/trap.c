@@ -52,6 +52,7 @@ trapinithart(void)
 void
 usertrap(void)
 {
+  // printf("[usertrap] scause: %d\n", r_scause());
   // printf("run in usertrap\n");
   int which_dev = 0;
 
@@ -66,18 +67,6 @@ usertrap(void)
   
   // save user program counter.
   p->trapframe->epc = r_sepc();
-  
-/* 缺页异常 */
-// 13 load ; 15 store
-  if (r_scause() == 15 || r_scause() == 13) {
-    printf("page fault!!! scause: %d\n", r_scause());
-    uint64 va = r_stval(); //触发异常的虚拟地址
-    uint64 cause = r_scause();
-    if (handle_page_fault(p, va, cause) < 0) {
-      printf("page fault at addr: %d, cause: %d\n", va, cause);
-      exit(-1);
-    }
-  }
 
   if(r_scause() == 8){
     // system call
@@ -91,6 +80,17 @@ usertrap(void)
     intr_on();
     syscall();
   } 
+  /* 缺页异常 */
+  // 13 load ; 15 store
+  else if (r_scause() == 15 || r_scause() == 13) {
+    // printf("page fault!!! scause: %d\n", r_scause());
+    uint64 va = r_stval(); //触发异常的虚拟地址
+    uint64 cause = r_scause();
+    if (handle_page_fault(p, va, cause) < 0) {  // vm.c: handle_page_fault
+      printf("page fault at addr: %d, cause: %d\n", va, cause);
+      exit(-1);
+    }
+  }
   else if((which_dev = devintr()) != 0){
     // ok
   } 

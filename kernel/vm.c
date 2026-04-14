@@ -233,9 +233,12 @@ vmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
     if((pte = walk(pagetable, a, 0)) == 0)
       panic("vmunmap: walk");
-    if((*pte & PTE_V) == 0)
+    if((*pte & PTE_V) == 0) {
       // panic("vmunmap: not mapped");
+      // printf("vmunmap: not mapped");
+      // [WARNING #3]
       continue;
+    }
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("vmunmap: not a leaf");
     if(do_free){
@@ -479,15 +482,24 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
   return 0;
 }
 
+// int
+// copyin2(char *dst, uint64 srcva, uint64 len)
+// {
+//   uint64 sz = myproc()->sz;
+//   if (srcva + len > sz || srcva >= sz) {
+//     return -1;
+//   }
+//   memmove(dst, (void *)srcva, len);
+//   return 0;
+// }
+
+// [WARNING #2] fat32.c: eread()->fat32.c: rw_clus()->proc.c: either_copyin()->vm.c: copyin2()
+// 这个copyin2他妈的会检查地址是不是超过了p->sz，然而mmap的第一个参数addr=0的时候我们默认放在进程空间末尾
+// 导致copyin2会失败，没有东西会读出来，所以修改copyin2不要做范围检查，直接用copyin
 int
-copyin2(char *dst, uint64 srcva, uint64 len)
-{
-  uint64 sz = myproc()->sz;
-  if (srcva + len > sz || srcva >= sz) {
-    return -1;
-  }
-  memmove(dst, (void *)srcva, len);
-  return 0;
+copyin2(char* dst, uint64 srcva, uint64 len) {
+  pagetable_t pagetable = myproc()->pagetable;
+  return copyin(pagetable, dst, srcva, len);
 }
 
 // Copy a null-terminated string from user to kernel.
@@ -683,45 +695,81 @@ alloc_vma(struct proc *p)
 int
 handle_page_fault(struct proc *p, uint64 va, int cause)
 {
-  struct vm_area *vma = find_vma(p, va);
-  if (vma == NULL) {
-    return -1;
-  }
-  if ((cause == 13 && !(vma->prot & PROT_WRITE)) || (cause == 15 && !(vma->prot & PROT_EXEC))) {
-    return -1;
-  }
-
-  uint64 pa = walkaddr(p->kpagetable, va);
-  if (pa != NULL) {
-    return -1;
-  }
-
-  char *mem = kalloc();
-  if (mem == NULL) {
-    return -1;
-  }
-  memset(mem, 0, PGSIZE);
-
-  uint64 perm = PTE_U | PTE_V;
-  if (vma->prot & PROT_READ) perm |= PTE_R;
-  if (vma->prot & PROT_WRITE) perm |= PTE_W;
-  if (vma->prot & PROT_EXEC) perm |= PTE_X;
-
-  if (mappages(p->kpagetable, PGROUNDDOWN(va), PGSIZE, (uint64)mem, perm) != 0) {
-    kfree(mem);
-    return -1;
-  }
-  
-  if (vma->file != NULL) {
-
-    elock(vma->file->ep);
-    // 计算文件内的偏移量：VMA 文件偏移 + 页在 VMA 内的偏移
-    uint64 file_offset = vma->offset + (PGROUNDDOWN(va) - vma->start);
-    // 从文件读取一页内容到内核地址 mem
-    eread(vma->file->ep, 0, (uint64)mem, file_offset, PGSIZE);
-    eunlock(vma->file->ep);
-
+    struct vm_area *vma = find_vma(p, va);
+    uint64 a = PGROUNDDOWN(va);
+    char *mem;
+    uint64 perm;
+    uint64 file_offset;
+    
+    // 1. 检查 VMA 是否存在
+    if (vma == NULL) {
+        printf("page fault: no VMA for va=%p\n", va);
+        return -1;
     }
+    
+    // 2. 检查访问权限
+    if (cause == 13) {  // Load page fault (读)
+        if (!(vma->prot & PROT_READ)) {
+            printf("page fault: read permission denied\n");
+            return -1;
+        }
+    } else if (cause == 15) {  // Store page fault (写)
+        if (!(vma->prot & PROT_WRITE)) {
+            printf("page fault: write permission denied\n");
+            return -1;
+        }
+    } else {
+        printf("page fault: unknown cause %d\n", cause);
+        return -1;
+    }
+    
+    // 3. 分配物理页
+    mem = kalloc();
+    if (mem == NULL) {
+        printf("page fault: out of memory\n");
+        return -1;
+    }
+    memset(mem, 0, PGSIZE);
+    
+    // 4. 如果是文件映射，读取文件内容
+    if (vma->file != NULL) {
+        file_offset = vma->offset + (a - vma->start);
+        elock(vma->file->ep);
+        
+        // [WARNING #2] fat32.c: eread()->fat32.c: rw_clus()->proc.c: either_copyin()->vm.c: copyin2()
+        // 这个copyin2他妈的会检查地址是不是超过了p->sz，然而mmap的第一个参数addr=0的时候我们默认放在末尾
+        // 导致copyin2会失败，没有东西会读出来，所以修改copyin2不要做范围检查
+        eread(vma->file->ep, 0, (uint64)mem, file_offset, PGSIZE);
+        eunlock(vma->file->ep);
+    }
+    
+    // 5. 计算用户页表权限
+    perm = PTE_U;
+    if (vma->prot & PROT_READ)
+        perm |= PTE_R;
+    if (vma->prot & PROT_WRITE)
+        perm |= PTE_W;
+    if (vma->prot & PROT_EXEC)
+        perm |= PTE_X;
+    
+    // 6. 只映射用户页表（不要映射内核页表！）
+    if (mappages(p->pagetable, a, PGSIZE, (uint64)mem, perm) != 0) {
+        printf("page fault: mappages failed\n");
+        kfree(mem);
+        return -1;
+    }
+    
+    // 7. 同时映射到内核页表（方便内核访问）
+    if (mappages(p->kpagetable, a, PGSIZE, (uint64)mem, (perm & ~PTE_U)) != 0) {
+        printf("page fault: kernel mappages failed\n");
+        vmunmap(p->pagetable, a, 1, 1);
+        kfree(mem);
+        p->killed = 1;
+        return -1;
+    }
+    
+    // printf("page fault: successfully mapped page at %p\n", a);
 
   return 0;
+
 }
