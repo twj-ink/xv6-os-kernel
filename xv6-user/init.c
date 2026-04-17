@@ -35,8 +35,23 @@ char *tests[] = {
   "mmap",
   "munmap",
 
+  /* 已有的 */
   "open",
+  "close",
+  "dup",
+  "read",
+  "fstat",
+  "pipe",
+
+  // "getdents",
+  // "dup2",
   // "openat",
+  // "mount",
+  // "umount",
+  // "unlink",
+  // "chdir",
+  // "mkdir",
+
 };
 
 int cycles = sizeof(tests) / sizeof(tests[0]);
