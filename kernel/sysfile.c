@@ -633,8 +633,9 @@ sys_mmap(void)
   // at which to create the mapping; this is
   // the most portable method of creating a new mapping.
   if (start == 0) {
-    // 直接选择进程的末尾
+    // 直接选择进程的末尾，注意这里要扩展进程自己的空间，否则copyin2会失败
     start = p->sz;
+    p->sz += len;
   }
   // If addr is not NULL, then the kernel takes it as  a  hint
   // about  where  to place the mapping; 
@@ -678,5 +679,72 @@ sys_mmap(void)
 uint64
 sys_munmap(void)
 {
-  return 0;
+  uint64 start, len;
+  uint64 end;
+  struct proc *p = myproc();
+  struct vm_area *vma;
+
+  if(argaddr(0, &start) < 0 || argaddr(1, &len) < 0) {
+    // printf("111\n");
+    return -1;
+  }
+
+  // The address addr must be a multiple of the page size (but length need not be).
+  if (start % PGSIZE != 0) {
+    // printf("222\n");
+    return -1;
+  }
+
+  // **All** pages containing a part of the indicated range are unmapped, 
+  // and subsequent references to these pages will generate SIGSEGV. 
+  len = PGROUNDUP(len);
+  end = start + len;
+
+  // 1. 查找需要unmap的vma
+  vma = find_vma(p, start);
+  if (vma == NULL) {/*printf("333\n");*/return -1;}
+
+  // 2. 如果是文件映射且是MAP_SHARED，需要先把内存中的数据写回文件
+  if ((vma->flags & MAP_SHARED) && vma->file) {
+    // 遍历每一页，用ewrite写回
+    for (uint64 addr = start; addr < end; addr += PGSIZE) {
+      pte_t *pte = walk(p->pagetable, addr, 0);
+      if (pte && (*pte & PTE_V)) {
+        uint64 pa = PTE2PA(*pte);
+        // 这里没有PTE_D，就直接写回吧！
+        uint64 file_offset = vma->offset + (addr - vma->start);
+        elock(vma->file->ep);
+        ewrite(vma->file->ep, 0, pa, file_offset, PGSIZE);
+        eunlock(vma->file->ep);
+      }
+    }
+  }
+
+  // 3. 释放物理内存并解除页表映射
+  for (uint64 addr = start; addr < end; addr += PGSIZE) {
+    pte_t *pte = walk(p->pagetable, addr, 0);
+    if (pte && (*pte & PTE_V)) {
+      vmunmap(p->pagetable, addr, 1, 1); // 直接do_free=1吧！由于这里没有实现物理页的refcnt还不能判断
+    }
+    // 还有内核页表
+    pte = walk(p->kpagetable, addr, 0);
+    if (pte && (*pte & PTE_V)) {
+      vmunmap(p->pagetable, addr, 1, 0); // 内核和用户用的是同一个物理页，不能double free
+    }
+  }
+
+  // 4. 释放文件引用
+  if (vma->file) {
+    fileclose(vma->file);
+    vma->file = NULL;
+  }
+
+  // 5. 释放vma
+  vma->used = 0;
+  p->vma_count--;
+
+    // printf("112221\n");
+
+
+  return 0;  
 }

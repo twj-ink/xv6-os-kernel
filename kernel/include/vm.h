@@ -53,6 +53,7 @@ int             copyout2(uint64 dstva, char *src, uint64 len);
 int             copyin2(char *dst, uint64 srcva, uint64 len);
 int             copyinstr2(char *dst, uint64 srcva, uint64 max);
 void            vmprint(pagetable_t pagetable);
+pte_t *         walk(pagetable_t pagetable, uint64 va, int alloc);
 
 struct vm_area* find_vma(struct proc *p, uint64 addr);
 struct vm_area* alloc_vma(struct proc *p);

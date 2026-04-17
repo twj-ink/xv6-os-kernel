@@ -36,6 +36,7 @@ char *tests[] = {
   "munmap",
 
   "open",
+  // "openat",
 };
 
 int cycles = sizeof(tests) / sizeof(tests[0]);
