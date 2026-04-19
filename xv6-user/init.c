@@ -40,9 +40,10 @@ char *tests[] = {
   "close",
   "dup",
   "read",
-  "fstat",
   "pipe",
 
+  /* 待实现的 */
+  // "fstat",
   // "getdents",
   // "dup2",
   // "openat",
@@ -50,7 +51,7 @@ char *tests[] = {
   // "umount",
   // "unlink",
   // "chdir",
-  // "mkdir",
+  "mkdir",
 
 };
 

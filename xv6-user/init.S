@@ -96,22 +96,7 @@ main:
 	.section	.rodata.str1.8
 	.align	3
 .LC4:
-	.string	"open"
-	.align	3
-.LC5:
-	.string	"close"
-	.align	3
-.LC6:
-	.string	"dup"
-	.align	3
-.LC7:
-	.string	"read"
-	.align	3
-.LC8:
-	.string	"fstat"
-	.align	3
-.LC9:
-	.string	"pipe"
+	.string	"mkdir"
 	.globl	argv
 	.data
 	.align	2
@@ -119,7 +104,7 @@ main:
 	.type	cycles, @object
 	.size	cycles, 4
 cycles:
-	.word	6
+	.word	1
 	.bss
 	.align	3
 	.set	.LANCHOR1,. + 0
@@ -131,13 +116,8 @@ argv:
 	.align	3
 	.set	.LANCHOR0,. + 0
 	.type	tests, @object
-	.size	tests, 48
+	.size	tests, 8
 tests:
 	.dword	.LC4
-	.dword	.LC5
-	.dword	.LC6
-	.dword	.LC7
-	.dword	.LC8
-	.dword	.LC9
 	.ident	"GCC: (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0"
 	.section	.note.GNU-stack,"",@progbits
