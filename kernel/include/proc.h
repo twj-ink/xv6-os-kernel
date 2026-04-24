@@ -80,6 +80,13 @@ struct proc {
   /* vm */
   struct vm_area vma[MAX_VMA];  // VMA数组
   int vma_count;                // 已使用的VMA数量
+
+  /* scheduler */
+#ifdef SCHEDULER_RR
+  int timeslice;                // 剩余的时间片
+  int base_timeslice;           // 基础的时间片
+#endif
+
 };
 
 void            reg_info(void);

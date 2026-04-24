@@ -436,3 +436,27 @@ sys_brk(void)
   }
 }
 
+uint64
+sys_set_timeslice(void)
+{
+  int timeslice;
+  if (argint(0, &timeslice) < 0) {
+    return -1;
+  }
+  struct proc *p = myproc();
+  p->timeslice = timeslice;
+  p->base_timeslice = timeslice;
+  return 0;
+}
+
+uint64
+sys_set_priority(void)
+{
+  return 0;
+}
+
+uint64
+sys_get_priority(void)
+{
+  return 0;
+}

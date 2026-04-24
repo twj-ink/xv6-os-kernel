@@ -181,6 +181,12 @@ found:
   }
   p->vma_count = 0;
 
+#ifdef SCHEDULER_RR
+  /* RR */
+  p->timeslice = 0;
+  p->base_timeslice = 0;
+#endif
+
   return p;
 }
 
@@ -331,6 +337,11 @@ userinit(void)
 
   p->tmask = 0;
 
+#ifdef SCHEDULER_RR
+  p->timeslice = 5;
+  p->base_timeslice = 5;
+#endif
+
   release(&p->lock);
   #ifdef DEBUG
   printf("userinit\n");
@@ -420,6 +431,12 @@ fork(void)
       np->vma_count++;
     }
   }
+
+#ifdef SCHEDULER_RR
+  /* RR */
+  np->timeslice = p->base_timeslice;
+  np->base_timeslice = p->base_timeslice;
+#endif
 
   release(&np->lock);
 
@@ -611,6 +628,13 @@ wait(uint64 addr)
 //  - swtch to start running that process.
 //  - eventually that process transfers control
 //    via swtch back to the scheduler.
+
+/* 
+swtch函数会：
+* 保存当前CPU的寄存器到c->context
+* 加载p->context中的寄存器
+* 跳转到进程上次离开的位置
+*/
 void
 scheduler(void)
 {
@@ -619,10 +643,51 @@ scheduler(void)
   extern pagetable_t kernel_pagetable;
 
   c->proc = 0;
+
+  int current_index = 0;
+
   for(;;){
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
+#ifdef SCHEDULER_RR
+    int found = 0;
+    // int current_index = 0;
+    // 从刚刚结束运行的进程开始，遍历一遍所有进程，找到第一个进程
+    for (int i = 0; i < NPROC; i++) {
+      int idx = (current_index + i) % NPROC;
+      p = &proc[idx];
+      acquire(&p->lock);
+      if(p->state == RUNNABLE && p->base_timeslice > 0 && p->timeslice >= 1) {    
+        // if (p->base_timeslice == 1||p->base_timeslice == 2||p->base_timeslice == 3){
+        // printf("curr proc:[%d], base_ts:[%d]\n", idx, p->base_timeslice);  }
+        p->state = RUNNING;
+        c->proc = p;
+
+        current_index = (idx + 1) % NPROC;
+
+        w_satp(MAKE_SATP(p->kpagetable));
+        sfence_vma();
+        swtch(&c->context, &p->context);
+        w_satp(MAKE_SATP(kernel_pagetable));
+        sfence_vma();
+
+        c->proc = 0;
+        release(&p->lock);
+
+        found = 1;
+        break;
+      }
+      release(&p->lock);
+    }
+    if(found == 0) {
+      intr_on();
+      asm volatile("wfi"); // 没有进程时让CPU进入低功耗等待状态
+    }
+#endif
     
+#ifndef SCHEDULER_RR
+#ifndef SCHEDULER_PRIORITY
+#ifndef SCHEDULER_MLFQ
     int found = 0;
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
@@ -633,14 +698,18 @@ scheduler(void)
         // printf("[scheduler]found runnable proc with pid: %d\n", p->pid);
         p->state = RUNNING;
         c->proc = p;
+        // 切换到用户页表
         w_satp(MAKE_SATP(p->kpagetable));
-        sfence_vma();
+        sfence_vma();  // 刷新TLB
+        // 切换到进程上下文
         swtch(&c->context, &p->context);
+        // 从进程切换回来后会执行下面的代码
+        // 切换回内核页表
         w_satp(MAKE_SATP(kernel_pagetable));
         sfence_vma();
         // Process is done running for now.
         // It should have changed its p->state before coming back.
-        c->proc = 0;
+        c->proc = 0; // 清空当前进程
 
         found = 1;
       }
@@ -648,8 +717,11 @@ scheduler(void)
     }
     if(found == 0) {
       intr_on();
-      asm volatile("wfi");
+      asm volatile("wfi"); // 没有进程时让CPU进入低功耗等待状态
     }
+#endif
+#endif
+#endif
   }
 }
 

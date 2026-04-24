@@ -134,6 +134,13 @@ extern uint64 sys_brk(void); // brk system call
 extern uint64 sys_mmap(void);
 extern uint64 sys_munmap(void);
 
+extern uint64 sys_dup2(void);
+
+extern uint64 sys_mkdirat(void);
+
+extern uint64 sys_set_timeslice(void);
+extern uint64 sys_set_priority(void);
+extern uint64 sys_get_priority(void);
 
 static uint64 (*syscalls[])(void) = {
   [SYS_fork]        sys_fork,
@@ -180,6 +187,16 @@ static uint64 (*syscalls[])(void) = {
   [SYS_mmap]        sys_mmap,
   [SYS_munmap]      sys_munmap,
 
+  [SYS_dup2]         sys_dup2,
+
+
+  [SYS_mkdirat]       sys_mkdirat,
+
+  [SYS_set_timeslice] sys_set_timeslice,
+  [SYS_set_priority]  sys_set_priority,
+  [SYS_get_priority]  sys_get_priority,
+
+
 };
 
 static char *sysnames[] = {
@@ -221,12 +238,20 @@ static char *sysnames[] = {
   [SYS_gettimeofday] "gettimeofday",
   [SYS_nanosleep]   "nanosleep",
 
-  [SYS_openat]       "openat",
+  [SYS_openat]      "openat",
 
   [SYS_brk]         "brk",
   [SYS_mmap]        "mmap",
   [SYS_munmap]      "munmap",
 
+  [SYS_dup2]         "dup2",
+
+
+  [SYS_mkdirat]     "mkdirat",
+
+  [SYS_set_timeslice] "set_timeslice",
+  [SYS_set_priority]  "set_priority",
+  [SYS_get_priority]  "get_priority",
 };
 
 void
@@ -278,3 +303,4 @@ sys_sysinfo(void)
 
   return 0;
 }
+

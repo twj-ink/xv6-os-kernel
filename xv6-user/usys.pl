@@ -57,3 +57,9 @@ entry("nanosleep");
 entry("brk");
 entry("mmap");
 entry("munmap");
+
+entry("dup2");
+
+entry("set_timeslice");
+entry("set_priority");
+entry("get_priority");

@@ -104,9 +104,30 @@ usertrap(void)
   if(p->killed)
     exit(-1);
 
-  // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  /* 原始是一到INTER就调度下一个 */
+  // // give up the CPU if this is a timer interrupt.
+  // if(which_dev == 2)
+  //   yield();
+  if (which_dev == 2) {
+#ifdef SCHEDULER_RR
+    // RR: 每次中断都减少timeslice，到0的时候进行调度
+    struct proc *p = myproc();
+    if (p != 0 && p->state == RUNNING) {
+      p->timeslice--;
+      if (p->timeslice <= 0) {
+        p->timeslice = p->base_timeslice;
+        yield();
+      }
+    } else {
+      yield();
+    }
+#endif
+
+#ifndef SCHEDULER_RR
+    // 最原始的调度
     yield();
+#endif
+  }
 
   usertrapret();
 }
@@ -182,9 +203,27 @@ kerneltrap() {
   }
   // printf("which_dev: %d\n", which_dev);
   
+
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2 && myproc() != 0 && myproc()->state == RUNNING) {
+#ifdef SCHEDULER_RR
+    // RR: 每次中断都减少timeslice，到0的时候进行调度
+    struct proc *p = myproc();
+    if (p != 0 && p->state == RUNNING) {
+      p->timeslice--;
+      if (p->timeslice <= 0) {
+        p->timeslice = p->base_timeslice;
+        yield();
+      }
+    } else {
+      yield();
+    }
+#endif
+
+#ifndef SCHEDULER_RR
+    // 最原始的调度
     yield();
+#endif
   }
   // the yield() may have caused some traps to occur,
   // so restore trap registers for use by kernelvec.S's sepc instruction.

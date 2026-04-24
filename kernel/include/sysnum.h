@@ -56,4 +56,9 @@
 #define SYS_trace       18   // 用于调试，追踪系统调用
 #define SYS_test_proc   22   // 自定义的测试调用
 
+#define SYS_set_timeslice   54322
+#define SYS_set_priority    54323
+#define SYS_get_priority    54324
+#define SYS_dup2        54321
+
 #endif

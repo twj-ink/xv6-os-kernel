@@ -214,60 +214,6 @@ sys_open(void)
   return fd;
 }
 
-// Linux test flags/layouts used in testsuits-for-oskernel.
-#define LINUX_O_WRONLY          0x001
-#define LINUX_O_RDWR            0x002
-#define LINUX_O_CREAT           0x040
-#define LINUX_O_TRUNC           0x200
-#define LINUX_O_APPEND          0x400
-
-
-int
-linux_open_flags_to_xv6(int flags)
-{
-  int out = O_RDONLY;
-
-  if(flags & LINUX_O_RDWR)
-    out = O_RDWR;
-  else if(flags & LINUX_O_WRONLY)
-    out = O_WRONLY;
-
-  if(flags & LINUX_O_CREAT)
-    out |= O_CREATE;
-  if(flags & LINUX_O_TRUNC)
-    out |= O_TRUNC;
-  if(flags & LINUX_O_APPEND)
-    out |= O_APPEND;
-
-  return out;
-}
-
-
-uint64
-sys_openat(void)
-{
-  int dirfd, flags;
-  uint64 path, mode;
-  uint64 old_a0, old_a1, ret;
-  struct proc *p = myproc();
-
-  if(argint(0, &dirfd) < 0 || argaddr(1, &path) < 0 ||
-     argint(2, &flags) < 0 || argaddr(3, &mode) < 0)
-    return -1;
-
-  (void)dirfd;
-  (void)mode;
-
-  old_a0 = p->trapframe->a0;
-  old_a1 = p->trapframe->a1;
-  p->trapframe->a0 = path;
-  p->trapframe->a1 = linux_open_flags_to_xv6(flags);
-  ret = sys_open();
-  p->trapframe->a0 = old_a0;
-  p->trapframe->a1 = old_a1;
-  return ret;
-}
-
 
 uint64
 sys_mkdir(void)
@@ -747,4 +693,127 @@ sys_munmap(void)
 
 
   return 0;  
+}
+
+uint64
+sys_mkdirat(void)
+{
+  int dirfd;
+  uint64 path;
+  int mode;
+  struct proc *p = myproc();
+
+  if(argint(0, &dirfd) < 0 || argaddr(1, &path) < 0 || argint(2, &mode) < 0){
+    return -1;
+  }
+  uint64 old_a0;
+  old_a0 = p->trapframe->a0;
+  p->trapframe->a0 = path;
+  uint64 ret = sys_mkdir();
+  p->trapframe->a0 = old_a0;
+  return ret;
+}
+
+// Linux test flags/layouts used in testsuits-for-oskernel.
+#define LINUX_O_WRONLY          0x001
+#define LINUX_O_RDWR            0x002
+#define LINUX_O_CREAT           0x040
+#define LINUX_O_TRUNC           0x200
+#define LINUX_O_APPEND          0x400
+
+
+int
+linux_open_flags_to_xv6(int flags)
+{
+  int out = O_RDONLY;
+
+  if(flags & LINUX_O_RDWR)
+    out = O_RDWR;
+  else if(flags & LINUX_O_WRONLY)
+    out = O_WRONLY;
+
+  if(flags & LINUX_O_CREAT)
+    out |= O_CREATE;
+  if(flags & LINUX_O_TRUNC)
+    out |= O_TRUNC;
+  if(flags & LINUX_O_APPEND)
+    out |= O_APPEND;
+
+  return out;
+}
+
+
+uint64
+sys_openat(void)
+{
+  int dirfd, flags;
+  uint64 path, mode;
+  uint64 old_a0, old_a1, ret;
+  struct proc *p = myproc();
+
+  if(argint(0, &dirfd) < 0 || argaddr(1, &path) < 0 ||
+     argint(2, &flags) < 0 || argaddr(3, &mode) < 0)
+    return -1;
+
+  (void)dirfd;
+  (void)mode;
+
+  old_a0 = p->trapframe->a0;
+  old_a1 = p->trapframe->a1;
+  p->trapframe->a0 = path;
+  p->trapframe->a1 = linux_open_flags_to_xv6(flags);
+  ret = sys_open();
+  p->trapframe->a0 = old_a0;
+  p->trapframe->a1 = old_a1;
+  return ret;
+}
+
+// 分配指定的文件描述符
+static int
+fdalloc2(struct file *f, int fd)
+{
+  struct proc *p = myproc();
+  
+  if(fd < 0 || fd >= NOFILE || p->ofile[fd])
+    return -1;
+  
+  p->ofile[fd] = f;
+  return 0;
+}
+
+
+uint64
+sys_dup2(void)
+{
+  struct file *f;
+  int oldfd, newfd;
+
+  // 获取参数：旧文件描述符和新的文件描述符
+  if(argint(0, &oldfd) < 0 || argint(1, &newfd) < 0)
+    return -1;
+  
+  // 验证文件描述符范围
+  if(oldfd < 0 || newfd < 0 || oldfd >= NOFILE || newfd >= NOFILE)
+    return -1;
+  
+  // 获取旧文件描述符对应的文件结构
+  if(argfd(0, &oldfd, &f) < 0)
+    return -1;
+  
+  // 如果新旧文件描述符相同，直接返回新fd
+  if(oldfd == newfd)
+    return newfd;
+  
+  // 如果新文件描述符已经被占用，先关闭它
+  if(myproc()->ofile[newfd]) {
+    fileclose(myproc()->ofile[newfd]);
+    myproc()->ofile[newfd] = 0;
+  }
+  
+  // 分配新的文件描述符（确保newfd可用）
+  if(fdalloc2(f, newfd) < 0)
+    return -1;
+  
+  filedup(f);
+  return newfd;
 }

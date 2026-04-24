@@ -5,6 +5,9 @@ mode := release
 K=kernel
 U=xv6-user
 T=target
+##### 功能性测试 #####
+TEST=xv6-user/testcases
+##### 功能性测试 #####
 
 OBJS = $K/entry_qemu.o
 
@@ -58,11 +61,67 @@ CFLAGS += -ffreestanding -fno-common -nostdlib -mno-relax
 CFLAGS += -I.
 CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
 
+##### 功能性测试 #####
+# 支持外部传入的编译标志
+CFLAGS += $(EXTRA_CFLAGS)
+
 ifeq ($(mode), debug) 
 CFLAGS += -DDEBUG 
 endif 
 
 CFLAGS += -D QEMU
+
+##### Part 4: 调度算法测试配置 #####
+# 默认调度器类型（简化版RR）
+SCHEDULER_TYPE ?= RR
+
+# 根据调度器类型设置对应的测试程序
+ifeq ($(SCHEDULER_TYPE), RR)
+	TEST_PROGRAM = test_proc_rr
+	CFLAGS += -DSCHEDULER_RR
+else ifeq ($(SCHEDULER_TYPE), PRIORITY)
+	TEST_PROGRAM = test_proc_priority
+	CFLAGS += -DSCHEDULER_PRIORITY
+else ifeq ($(SCHEDULER_TYPE), MLFQ)
+	TEST_PROGRAM = test_proc_mlfq
+	CFLAGS += -DSCHEDULER_MLFQ
+else
+	$(error Unknown scheduler type: $(SCHEDULER_TYPE))
+endif
+
+# 将测试程序名编译进内核
+CFLAGS += -DTEST_PROGRAM=\"$(TEST_PROGRAM)\"
+
+# 用户程序编译标志
+USER_CFLAGS = 
+
+# 如果启用了judger自动化测试框架
+ifeq ($(ENABLE_JUDGER), 1)
+	USER_CFLAGS += -DENABLE_JUDGER=1
+	# 传递调度器类型到用户程序
+	ifeq ($(SCHEDULER_TYPE), RR)
+		USER_CFLAGS += -DSCHEDULER_RR
+	else ifeq ($(SCHEDULER_TYPE), PRIORITY)
+		USER_CFLAGS += -DSCHEDULER_PRIORITY
+	else ifeq ($(SCHEDULER_TYPE), MLFQ)
+		USER_CFLAGS += -DSCHEDULER_MLFQ
+	endif
+	USER_CFLAGS += -DTEST_PROGRAM=\"$(TEST_PROGRAM)\"
+else
+	# 普通模式：传递调度器类型给用户程序
+	ifeq ($(SCHEDULER_TYPE), RR)
+		USER_CFLAGS += -DSCHEDULER_RR
+	else ifeq ($(SCHEDULER_TYPE), PRIORITY)
+		USER_CFLAGS += -DSCHEDULER_PRIORITY
+	else ifeq ($(SCHEDULER_TYPE), MLFQ)
+		USER_CFLAGS += -DSCHEDULER_MLFQ
+	endif
+	USER_CFLAGS += -DTEST_PROGRAM=\"$(TEST_PROGRAM)\"
+endif
+
+# 支持外部传入的用户编译标志
+USER_CFLAGS += $(EXTRA_CFLAGS)
+##### Part 4: 调度算法测试配置 #####
 
 LDFLAGS = -z max-page-size=4096
 
@@ -103,8 +162,11 @@ QEMUOPTS += -bios $(RUSTSBI)
 QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0 
 QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 
+# 普通运行命令（类似之前的local，但不清理）
 run: build
 	@$(QEMU) $(QEMUOPTS)
+
+
 
 $U/initcode: $U/initcode.S
 	$(CC) $(CFLAGS) -march=rv64g -nostdinc -I. -Ikernel -c $U/initcode.S -o $U/initcode.o
@@ -159,20 +221,24 @@ UPROGS=\
 	$U/_strace\
 	$U/_mv\
 
-	# $U/_forktest\
-	# $U/_ln\
-	# $U/_stressfs\
-	# $U/_grind\
-	# $U/_zombie\
+##### Part 4: 测试用例编译 #####
+TESTCASES=\
+	$(TEST)/_judger\
+	$(TEST)/_$(TEST_PROGRAM)\
+
+# 编译测试用例的规则
+$(TEST)/%: $(TEST)/%.c $(ULIB)
+	$(CC) $(USER_CFLAGS) -c -o $(TEST)/$*.o $(TEST)/$*.c
+	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $@ $(TEST)/$*.o $(ULIB)
+	@$(OBJDUMP) -S $@ > $(TEST)/$*.asm
+##### Part 4: 测试用例编译 #####
 
 userprogs: $(UPROGS)
 
 dst=/mnt
 
-# @cp $U/_init $(dst)/init
-# @cp $U/_sh $(dst)/sh
 # Make fs image
-fs: $(UPROGS)
+fs: $(UPROGS) $(TESTCASES)
 	@if [ ! -f "fs.img" ]; then \
 		echo "making fs image..."; \
 		dd if=/dev/zero of=fs.img bs=512k count=512; \
@@ -183,6 +249,8 @@ fs: $(UPROGS)
 	@for file in $$( ls $U/_* ); do \
 		cp $$file $(dst)/$${file#$U/_};\
 		cp $$file $(dst)/bin/$${file#$U/_}; done
+	@for file in $$( ls $(TEST)/_* ); do \
+		cp $$file $(dst)/$${file#$(TEST)/_}; done
 	@cp -r ./riscv64/* $(dst)
 	@umount $(dst)
 
@@ -204,23 +272,6 @@ dump: userprogs
 	od -v -t x1 -An oo | sed -E 's/ (.{2})/0x\1,/g' > kernel/include/initcode.h
 	rm oo
 
-
-# # 如果是提交到希冀平台，因为平台提供的 sdcard.img 挂载里没有 init.c 文件
-# # 所以需要硬编码完整的 init.c 程序的机器码到 initcode.h 中
-# HARD_CODE_INIT = 0
-
-# ifeq ($(HARD_CODE_INIT), 1)
-# dump: userprogs
-# 	@echo "HARD_CODE_INIT is 1, compile the entire init.c program into initcode.h directly."
-# 	@$(TOOLPREFIX)objcopy -S -O binary $U/_init tmp_initcode
-# 	@od -v -t x1 -An tmp_initcode | sed -E 's/ (.{2})/0x\1,/g' > kernel/include/initcode.h 
-# 	@rm tmp_initcode
-# else
-# dump: $U/initcode
-# 	@echo "HARD_CODE_INIT is 0, compile the bootstrap fragment initcode.S normally."
-# 	@od -v -t x1 -An $U/initcode | sed -E 's/ (.{2})/0x\1,/g' > kernel/include/initcode.h
-# endif
-
 clean: 
 	rm -f *.tex *.dvi *.idx *.aux *.log *.ind *.ilg \
 	*/*.o */*.d */*.asm */*.sym \
@@ -229,7 +280,9 @@ clean:
 	$K/kernel \
 	.gdbinit \
 	$U/usys.S \
-	$(UPROGS)
+	$(UPROGS) \
+	$(TEST)/*.d $(TEST)/*.o $(TEST)/*.asm $(TEST)/*.sym $(TEST)/_* \
+	$(TESTCASES)
 	
 # 希冀平台所使用的编译命令
 all:
@@ -239,20 +292,6 @@ all:
 	@cp $(T)/kernel ./kernel-qemu
 	@cp ./bootloader/SBI/sbi-qemu ./sbi-qemu
 
-# run_test:
-# 	@$(MAKE) clean
-# 	@$(MAKE) dump ENABLE_JUDGER=1
-# 	@$(MAKE) build ENABLE_JUDGER=1
-# 	@$(MAKE) fs ENABLE_JUDGER=1
-# 	@$(MAKE) run ENABLE_JUDGER=1
-
-local:
-	@$(MAKE) clean
-	@$(MAKE) dump
-	@$(MAKE) build
-	@$(MAKE) fs
-	@$(MAKE) run
-
 QEMUOPTS_GDB = $(QEMUOPTS) -S -gdb tcp::1234,server,nowait
 
 gdb: build
@@ -260,3 +299,36 @@ gdb: build
 	@echo "In another terminal, run: 'gdb-multiarch target/kernel', then type 'c' to continue"
 	@echo "=============================================="
 	$(QEMU) $(QEMUOPTS_GDB)
+
+# local命令：完全类似之前的行为
+local:
+	@$(MAKE) clean
+	@$(MAKE) dump
+	@$(MAKE) build
+	@$(MAKE) fs
+	@$(MAKE) run
+
+##### Part 4: 自动化测试命令 #####
+# run_test: 启用自动化测试框架进行调度算法测试
+# 使用方法：
+#   make run_test SCHEDULER_TYPE=RR
+#   make run_test SCHEDULER_TYPE=PRIORITY  
+#   make run_test SCHEDULER_TYPE=MLFQ
+# 助教提供的功能性测试平台所使用的编译命令
+run_test:
+	@$(MAKE) clean
+	@$(MAKE) dump ENABLE_JUDGER=1
+	@$(MAKE) build ENABLE_JUDGER=1
+	@$(MAKE) fs ENABLE_JUDGER=1
+	@$(MAKE) run ENABLE_JUDGER=1
+
+# 单独的测试命令（更简洁）
+test-rr:
+	@$(MAKE) run_test SCHEDULER_TYPE=RR
+
+test-mlfq:
+	@$(MAKE) run_test SCHEDULER_TYPE=MLFQ
+
+test-priority:
+	@$(MAKE) run_test SCHEDULER_TYPE=PRIORITY
+##### Part 4: 自动化测试命令 #####
