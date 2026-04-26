@@ -123,9 +123,33 @@ usertrap(void)
     }
 #endif
 
+#ifdef SCHEDULER_PRIORITY
+    // 无需改动，仍然是每次时钟中断就选进程
+    yield();
+#endif
+
+#ifdef SCHEDULER_MLFQ
+    // 记录进程的tick
+    struct proc *p = myproc();
+    if (p != 0 && p-> state == RUNNING) {
+      p->cpu_ticks++;
+      p->runtime_ticks++;
+
+      if (p->runtime_ticks >= 10) {
+        update_priority(p); // proc.c
+        p->runtime_ticks = 0;
+      }
+    }
+    yield();
+#endif
+
 #ifndef SCHEDULER_RR
+#ifndef SCHEDULER_PRIORITY
+#ifndef SCHEDULER_MLFQ
     // 最原始的调度
     yield();
+#endif
+#endif
 #endif
   }
 

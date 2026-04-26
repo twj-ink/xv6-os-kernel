@@ -87,6 +87,17 @@ struct proc {
   int base_timeslice;           // 基础的时间片
 #endif
 
+#ifdef SCHEDULER_PRIORITY
+  int priority;                 // 数值越小，优先级越高
+#endif
+
+#ifdef SCHEDULER_MLFQ
+  int priority;
+  int cpu_ticks;                // 占用cpu的时间
+  int sleep_ticks;             // 睡眠时间
+  int runtime_ticks;            // 当前周期tick计数
+#endif
+
 };
 
 void            reg_info(void);
@@ -116,6 +127,10 @@ uint64          procnum(void);
 void            test_proc_init(int);
 
 int             clone(void);
+
+#ifdef SCHEDULER_MLFQ
+void            update_priority(struct proc *);
+#endif
 
 
 #endif

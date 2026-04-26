@@ -187,6 +187,17 @@ found:
   p->base_timeslice = 0;
 #endif
 
+#ifdef SCHEDULER_PRIORITY
+  p->priority = 20;
+#endif
+
+#ifdef SCHEDULER_MLFQ
+  p->priority = 20;
+  p->cpu_ticks = 0;
+  p->sleep_ticks = 0;
+  p->runtime_ticks = 0;
+#endif
+
   return p;
 }
 
@@ -223,6 +234,23 @@ freeproc(struct proc *p)
     p->vma[i].used = 0;
   }
   p->vma_count = 0;
+
+#ifdef SCHEDULER_RR
+  /* RR */
+  p->timeslice = 0;
+  p->base_timeslice = 0;
+#endif
+
+#ifdef SCHEDULER_PRIORITY
+  p->priority = 20;
+#endif
+
+#ifdef SCHEDULER_MLFQ
+  p->priority = 20;
+  p->cpu_ticks = 0;
+  p->sleep_ticks = 0;
+  p->runtime_ticks = 0;
+#endif
 }
 
 // Create a user page table for a given process,
@@ -342,6 +370,10 @@ userinit(void)
   p->base_timeslice = 5;
 #endif
 
+#ifdef SCHEDULER_PRIORITY
+  p->priority = 0;
+#endif
+
   release(&p->lock);
   #ifdef DEBUG
   printf("userinit\n");
@@ -436,6 +468,17 @@ fork(void)
   /* RR */
   np->timeslice = p->base_timeslice;
   np->base_timeslice = p->base_timeslice;
+#endif
+
+#ifdef SCHEDULER_PRIORITY
+  np->priority = p->priority;
+#endif
+
+#ifdef SCHEDULER_MLFQ
+  np->priority = p->priority;
+  np->cpu_ticks = 0;
+  np->sleep_ticks = 0;
+  np->runtime_ticks = 0;
 #endif
 
   release(&np->lock);
@@ -644,7 +687,9 @@ scheduler(void)
 
   c->proc = 0;
 
+#ifdef SCHEDULER_RR
   int current_index = 0;
+#endif
 
   for(;;){
     // Avoid deadlock by ensuring that devices can interrupt.
@@ -684,7 +729,93 @@ scheduler(void)
       asm volatile("wfi"); // 没有进程时让CPU进入低功耗等待状态
     }
 #endif
-    
+
+#ifdef SCHEDULER_PRIORITY
+    // int found = 0;
+    struct proc *best = 0;
+    // 遍历找到优先级最小的
+    for(p = proc; p < &proc[NPROC]; p++) {
+      acquire(&p->lock);
+      if(p->state == RUNNABLE) {
+        if (best == 0 || p->priority < best->priority) {
+
+          best = p;
+
+        }
+      }
+      release(&p->lock);
+    }
+
+    // 找到了运行
+    if (best) {
+      acquire(&best->lock);
+
+      if (best->state == RUNNABLE) {
+        best->state = RUNNING;
+        c->proc = best;
+        // 切换到用户页表
+        w_satp(MAKE_SATP(best->kpagetable));
+        sfence_vma();  // 刷新TLB
+        // 切换到进程上下文
+        swtch(&c->context, &best->context);
+        // 从进程切换回来后会执行下面的代码
+        // 切换回内核页表
+        w_satp(MAKE_SATP(kernel_pagetable));
+        sfence_vma();
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0; // 清空当前进程
+      }
+      release(&best->lock);
+    } else {
+      intr_on();
+      asm volatile("wfi");
+    }
+#endif
+
+#ifdef SCHEDULER_MLFQ // 和PRIORITY一样
+    // int found = 0;
+    struct proc *best = 0;
+    // 遍历找到优先级最小的
+    for(p = proc; p < &proc[NPROC]; p++) {
+      acquire(&p->lock);
+      if(p->state == RUNNABLE) {
+        if (best == 0 || p->priority < best->priority) {
+
+          best = p;
+
+        }
+      }
+      release(&p->lock);
+    }
+
+    // 找到了运行
+    if (best) {
+      acquire(&best->lock);
+
+      if (best->state == RUNNABLE) {
+        best->state = RUNNING;
+        c->proc = best;
+        // 切换到用户页表
+        w_satp(MAKE_SATP(best->kpagetable));
+        sfence_vma();  // 刷新TLB
+        // 切换到进程上下文
+        swtch(&c->context, &best->context);
+        // 从进程切换回来后会执行下面的代码
+        // 切换回内核页表
+        w_satp(MAKE_SATP(kernel_pagetable));
+        sfence_vma();
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0; // 清空当前进程
+      }
+      release(&best->lock);
+    } else {
+      intr_on();
+      asm volatile("wfi");
+    }
+#endif
+
 #ifndef SCHEDULER_RR
 #ifndef SCHEDULER_PRIORITY
 #ifndef SCHEDULER_MLFQ
@@ -985,7 +1116,34 @@ clone(void)
       }
       release(&np->lock);
     }
-  }
+  }  
 
   return pid;
 }
+
+#ifdef SCHEDULER_MLFQ
+void update_priority(struct proc *p) {
+  // 避免除0
+  if(p->cpu_ticks + p->sleep_ticks == 0)
+    return;
+
+  // 核心：比较比例，而不是绝对值
+  if(p->cpu_ticks > p->sleep_ticks * 2){
+    // CPU密集 → 降级
+    p->priority++;
+  }
+  else if(p->sleep_ticks > p->cpu_ticks * 2){
+    // IO密集 → 升级
+    p->priority--;
+  }
+  // 否则不变（混合型）
+
+  // 限制范围
+  if(p->priority < 1) p->priority = 1;
+  if(p->priority > 20) p->priority = 20;
+
+  // 清零（必须）
+  p->cpu_ticks = 0;
+  p->sleep_ticks = 0;
+}
+#endif

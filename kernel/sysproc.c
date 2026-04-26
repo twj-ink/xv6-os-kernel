@@ -111,6 +111,12 @@ sys_sleep(void)
 
   if(argint(0, &n) < 0)
     return -1;
+
+#ifdef SCHEDULER_MLFQ
+  struct proc *p = myproc();
+  p->sleep_ticks += n;
+#endif
+
   acquire(&tickslock);
   ticks0 = ticks;
   while(ticks - ticks0 < n){
@@ -436,6 +442,7 @@ sys_brk(void)
   }
 }
 
+#ifdef SCHEDULER_RR
 uint64
 sys_set_timeslice(void)
 {
@@ -448,15 +455,48 @@ sys_set_timeslice(void)
   p->base_timeslice = timeslice;
   return 0;
 }
+#endif
 
+#ifdef SCHEDULER_PRIORITY
 uint64
 sys_set_priority(void)
 {
+  int pri;
+  if (argint(0, &pri) < 0) {
+    return -1;
+  }
+  struct proc *p = myproc();
+  p->priority = pri;
   return 0;
 }
 
 uint64
 sys_get_priority(void)
 {
+  struct proc *p = myproc();
+  int pri = p->priority;
+  return pri;
+}
+#endif
+
+#ifdef SCHEDULER_MLFQ
+uint64
+sys_set_priority(void)
+{
+  int pri;
+  if (argint(0, &pri) < 0) {
+    return -1;
+  }
+  struct proc *p = myproc();
+  p->priority = pri;
   return 0;
 }
+
+uint64
+sys_get_priority(void)
+{
+  struct proc *p = myproc();
+  int pri = p->priority;
+  return pri;
+}
+#endif
