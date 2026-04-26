@@ -112,21 +112,47 @@ sys_sleep(void)
   if(argint(0, &n) < 0)
     return -1;
 
-#ifdef SCHEDULER_MLFQ
-  struct proc *p = myproc();
-  p->sleep_ticks += n;
-#endif
 
   acquire(&tickslock);
+
+#ifdef SCHEDULER_MLFQ
+  struct proc *p = myproc();
+  int slept = 0;
+#endif
   ticks0 = ticks;
   while(ticks - ticks0 < n){
     if(myproc()->killed){
+
+#ifdef SCHEDULER_MLFQ
+    slept = ticks - ticks0;
+#endif
+
       release(&tickslock);
+
+#ifdef SCHEDULER_MLFQ
+    if (slept > 0) {
+      p->sleep_ticks += slept;
+          // printf("PID %d slept %d ticks, total sleep_ticks=%d\n", 
+          //  p->pid, slept, p->sleep_ticks);  // 添加这行
+    }
+#endif
+
       return -1;
     }
     sleep(&ticks, &tickslock);
   }
   release(&tickslock);
+
+#ifdef SCHEDULER_MLFQ
+  slept = ticks - ticks0;
+  if (slept > 0) {
+        // printf("PID %d slept %d ticks, total sleep_ticks=%d\n", 
+        //    p->pid, slept, p->sleep_ticks);  // 添加这行
+    p->sleep_ticks += slept;
+    update_priority(p);
+  }
+#endif
+
   return 0;
 }
 

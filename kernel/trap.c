@@ -135,7 +135,7 @@ usertrap(void)
       p->cpu_ticks++;
       p->runtime_ticks++;
 
-      if (p->runtime_ticks >= 10) {
+      if (p->runtime_ticks >= 5) {
         update_priority(p); // proc.c
         p->runtime_ticks = 0;
       }

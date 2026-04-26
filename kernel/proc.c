@@ -1123,27 +1123,28 @@ clone(void)
 
 #ifdef SCHEDULER_MLFQ
 void update_priority(struct proc *p) {
-  // 避免除0
-  if(p->cpu_ticks + p->sleep_ticks == 0)
-    return;
-
-  // 核心：比较比例，而不是绝对值
-  if(p->cpu_ticks > p->sleep_ticks * 2){
-    // CPU密集 → 降级
-    p->priority++;
-  }
-  else if(p->sleep_ticks > p->cpu_ticks * 2){
-    // IO密集 → 升级
-    p->priority--;
-  }
-  // 否则不变（混合型）
+  // printf("[update_priority]\n");
+  //   printf("PID %d: cpu=%d, sleep=%d, prio=%d -> ", 
+  //          p->pid, p->cpu_ticks, p->sleep_ticks, p->priority);
+    
+    if(p->cpu_ticks > p->sleep_ticks * 2){
+        p->priority++;
+        // printf("CPU dense, new prio=%d\n", p->priority);
+    }
+    else if(p->sleep_ticks > p->cpu_ticks * 2){
+        p->priority--;
+        // printf("IO dense, new prio=%d\n", p->priority);
+    }
 
   // 限制范围
   if(p->priority < 1) p->priority = 1;
-  if(p->priority > 20) p->priority = 20;
+  if(p->priority > 30) p->priority = 30;
 
-  // 清零（必须）
-  p->cpu_ticks = 0;
-  p->sleep_ticks = 0;
+  // // 清零（必须）
+  // p->cpu_ticks = 0;
+  // p->sleep_ticks = 0;
+  // 只清零部分，保留一些历史
+  p->cpu_ticks = p->cpu_ticks / 2;
+  p->sleep_ticks = p->sleep_ticks / 2;
 }
 #endif
