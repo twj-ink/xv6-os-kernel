@@ -15,16 +15,23 @@ struct stat {
 };
 
 struct stat2 {
-  uint64      st_dev;      /* ID of device containing file */
-  uint64      st_ino;      /* Inode number */
-  uint64     st_mode;     /* File type and mode */
-  uint64    st_nlink;    /* Number of hard links */
-  uint64      st_uid;      /* User ID of owner */
-  uint64      st_gid;      /* Group ID of owner */
-  uint64      st_rdev;     /* Device ID (if special file) */
-  uint64      st_size;     /* Total size, in bytes */
-  uint64  st_blksize;  /* Block size for filesystem I/O */
-  uint64   st_blocks;   /* Number of 512 B blocks allocated */
+  uint64      st_dev;         //  0
+  uint64      st_ino;         //  8
+  uint32      st_mode;        // 16
+  uint32      st_nlink;       // 20
+  uint32      st_uid;         // 24
+  uint32      st_gid;         // 28
+  uint64      st_rdev;        // 32
+  uint64      __pad;          // 40
+  uint64      st_size;        // 48
+  uint64      st_blksize;     // 56
+  uint64      st_blocks;      // 64
+  uint64      st_atime_sec;   // 72
+  uint64      st_atime_nsec;  // 80
+  uint64      st_mtime_sec;   // 88
+  uint64      st_mtime_nsec;  // 96
+  uint64      st_ctime_sec;   // 104
+  uint64      st_ctime_nsec;  // 112
 };
 // struct stat {
 //   int dev;     // File system's disk device

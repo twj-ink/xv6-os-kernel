@@ -728,10 +728,17 @@ void estat2(struct dirent *de, struct stat2 *st)
     st->st_nlink = 1;     // we don't support hard link, so just set it to 1
     st->st_uid = 0;       // we don't support user, so just set it to 0
     st->st_gid = 0;       // we don't support group, so just set it to 0
-    st->st_rdev = 0;      // we don't support special file, so just set it to 0 
+    st->st_rdev = 0;      // we don't support special file, so just set it to 0
+    st->__pad = 0;
     st->st_size = de->file_size;
-    st->st_blksize = fat.byts_per_clus; // we don't support block size, so just set it to cluster size
+    st->st_blksize = fat.byts_per_clus;
     st->st_blocks = (de->file_size + fat.byts_per_clus - 1) / fat.byts_per_clus;
+    st->st_atime_sec = 0;
+    st->st_atime_nsec = 0;
+    st->st_mtime_sec = 0;
+    st->st_mtime_nsec = 0;
+    st->st_ctime_sec = 0;
+    st->st_ctime_nsec = 0;
 }
 
 /**
