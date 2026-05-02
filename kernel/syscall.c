@@ -111,32 +111,30 @@ extern uint64 sys_uptime(void);
 extern uint64 sys_test_proc(void);
 extern uint64 sys_dev(void);
 extern uint64 sys_readdir(void);
+extern uint64 sys_getdents(void);
 extern uint64 sys_getcwd(void);
 extern uint64 sys_remove(void);
 extern uint64 sys_trace(void);
 extern uint64 sys_sysinfo(void);
 extern uint64 sys_rename(void);
-
 extern uint64 sys_shutdown(void); // shutdown system call
 extern uint64 sys_times(void); // times system call
 extern uint64 sys_uname(void); // uname system call
-
 extern uint64 sys_clone(void); // clone system call
 extern uint64 sys_wait4(void); // wait4 system call
 extern uint64 sys_sched_yield(void);
 extern uint64 sys_getppid(void);
 extern uint64 sys_gettimeofday(void);
 extern uint64 sys_nanosleep(void);
-
 extern uint64 sys_openat(void);
-
 extern uint64 sys_brk(void); // brk system call
 extern uint64 sys_mmap(void);
 extern uint64 sys_munmap(void);
-
-extern uint64 sys_dup2(void);
-
+extern uint64 sys_dup3(void);
 extern uint64 sys_mkdirat(void);
+extern uint64 sys_unlinkat(void);
+extern uint64 sys_mount(void);
+extern uint64 sys_umount2(void);
 
 #ifdef SCHEDULER_RR
 extern uint64 sys_set_timeslice(void);
@@ -172,33 +170,31 @@ static uint64 (*syscalls[])(void) = {
   [SYS_test_proc]   sys_test_proc,
   [SYS_dev]         sys_dev,
   [SYS_readdir]     sys_readdir,
+  [SYS_getdents]    sys_getdents,
   [SYS_getcwd]      sys_getcwd,
   [SYS_remove]      sys_remove,
   [SYS_trace]       sys_trace,
   [SYS_sysinfo]     sys_sysinfo,
   [SYS_rename]      sys_rename,
-
   [SYS_shutdown]    sys_shutdown, // shutdown system call
 	[SYS_times]       sys_times,
 	[SYS_uname]       sys_uname,
-
   [SYS_clone]       sys_clone,
   [SYS_wait4]       sys_wait4,
   [SYS_sched_yield] sys_sched_yield,
   [SYS_getppid]     sys_getppid,
-  [SYS_gettimeofday] sys_gettimeofday,
+  [SYS_gettimeofday]sys_gettimeofday,
   [SYS_nanosleep]   sys_nanosleep,
-
-  [SYS_openat]        sys_openat,
-
+  [SYS_openat]      sys_openat,
+  [SYS_unlinkat]    sys_unlinkat,
   [SYS_brk]         sys_brk,
   [SYS_mmap]        sys_mmap,
   [SYS_munmap]      sys_munmap,
+  [SYS_dup3]        sys_dup3,
+  [SYS_mkdirat]     sys_mkdirat,
+  [SYS_mount]       sys_mount,
+  [SYS_umount2]     sys_umount2,
 
-  [SYS_dup2]         sys_dup2,
-
-
-  [SYS_mkdirat]       sys_mkdirat,
 #ifdef SCHEDULER_RR
   [SYS_set_timeslice] sys_set_timeslice,
 #endif
@@ -236,33 +232,32 @@ static char *sysnames[] = {
   [SYS_test_proc]   "test_proc",
   [SYS_dev]         "dev",
   [SYS_readdir]     "readdir",
+  [SYS_getdents]    "getdents",
   [SYS_getcwd]      "getcwd",
   [SYS_remove]      "remove",
   [SYS_trace]       "trace",
   [SYS_sysinfo]     "sysinfo",
   [SYS_rename]      "rename",
-
   [SYS_shutdown]    "shutdown", // shutdown system call
 	[SYS_times]       "times",
 	[SYS_uname]       "uname",
-
   [SYS_clone]       "clone",
   [SYS_wait4]       "wait4",
   [SYS_sched_yield] "sched_yield",
   [SYS_getppid]     "getppid",
-  [SYS_gettimeofday] "gettimeofday",
+  [SYS_gettimeofday]"gettimeofday",
   [SYS_nanosleep]   "nanosleep",
-
   [SYS_openat]      "openat",
-
+  [SYS_unlinkat]    "unlinkat",
   [SYS_brk]         "brk",
   [SYS_mmap]        "mmap",
   [SYS_munmap]      "munmap",
-
-  [SYS_dup2]         "dup2",
-
-
+  [SYS_dup3]        "dup3",
   [SYS_mkdirat]     "mkdirat",
+  [SYS_mount]       "mount",
+  [SYS_umount2]     "umount2",
+
+
 #ifdef SCHEDULER_RR
   [SYS_set_timeslice] "set_timeslice",
 #endif

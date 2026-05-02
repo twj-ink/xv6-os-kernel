@@ -23,6 +23,9 @@
 #define SYS_remove      117  // 删除文件或目录
 #define SYS_unlinkat    35   // 在指定目录下删除文件
 #define SYS_dev         21   // 设备文件操作
+#define SYS_getdents    61
+#define SYS_mount       40
+#define SYS_umount2     39
 
 // Process management related (进程管理相关)
 #define SYS_fork         1   // 创建子进程

@@ -99,11 +99,11 @@ int
 filestat(struct file *f, uint64 addr)
 {
   // struct proc *p = myproc();
-  struct stat st;
+  struct stat2 st;
   
   if(f->type == FD_ENTRY){
     elock(f->ep);
-    estat(f->ep, &st);
+    estat2(f->ep, &st);
     eunlock(f->ep);
     // if(copyout(p->pagetable, addr, (char *)&st, sizeof(st)) < 0)
     if(copyout2(addr, (char *)&st, sizeof(st)) < 0)

@@ -23,6 +23,20 @@
 #define FAT32_MAX_PATH      260
 #define ENTRY_CACHE_NUM     50
 
+// DT_* constants for dirent64.d_type
+#define DT_UNKNOWN  0
+#define DT_DIR      4
+#define DT_REG      8
+
+// userspace dirent64 struct, matching linux getdents64 layout
+struct dirent64 {
+    uint64          d_ino;      // inode number (0 for FAT32)
+    uint64          d_off;      // offset to next dirent
+    unsigned short  d_reclen;   // length of this record
+    unsigned char   d_type;     // DT_DIR / DT_REG
+    char            d_name[];   // null-terminated filename
+};
+
 struct dirent {
     char  filename[FAT32_MAX_FILENAME + 1];
     uint8   attribute;
@@ -66,7 +80,12 @@ void            eunlock(struct dirent *entry);
 int             enext(struct dirent *dp, struct dirent *ep, uint off, int *count);
 struct dirent*  ename(char *path);
 struct dirent*  enameparent(char *path, char *name);
+struct dirent*  enameat(struct dirent *dp, char *path);
+struct dirent*  enameparentat(struct dirent *dp, char *path, char *name);
 int             eread(struct dirent *entry, int user_dst, uint64 dst, uint off, uint n);
 int             ewrite(struct dirent *entry, int user_src, uint64 src, uint off, uint n);
+
+void            estat2(struct dirent *ep, struct stat2 *st);
+
 
 #endif

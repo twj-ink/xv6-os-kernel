@@ -59,6 +59,7 @@ entry("mmap");
 entry("munmap");
 
 entry("dup2");
+entry("dup3");
 
 entry("set_timeslice");
 entry("set_priority");

@@ -709,6 +709,31 @@ void estat(struct dirent *de, struct stat *st)
     st->size = de->file_size;
 }
 
+//   uint64      st_dev;      /* ID of device containing file */
+//   uint64      st_ino;      /* Inode number */
+//   uint64     st_mode;     /* File type and mode */
+//   uint64    st_nlink;    /* Number of hard links */
+//   uint64      st_uid;      /* User ID of owner */
+//   uint64      st_gid;      /* Group ID of owner */
+//   uint64      st_rdev;     /* Device ID (if special file) */
+//   uint64      st_size;     /* Total size, in bytes */
+//   uint64  st_blksize;  /* Block size for filesystem I/O */
+//   uint64   st_blocks;   /* Number of 512 B blocks allocated */
+
+void estat2(struct dirent *de, struct stat2 *st)
+{
+    st->st_dev = de->dev;
+    st->st_ino = 0;        // we don't have inode number, so just set it to 0
+    st->st_mode = (de->attribute & ATTR_DIRECTORY) ? DT_DIR : DT_REG;
+    st->st_nlink = 1;     // we don't support hard link, so just set it to 1
+    st->st_uid = 0;       // we don't support user, so just set it to 0
+    st->st_gid = 0;       // we don't support group, so just set it to 0
+    st->st_rdev = 0;      // we don't support special file, so just set it to 0 
+    st->st_size = de->file_size;
+    st->st_blksize = fat.byts_per_clus; // we don't support block size, so just set it to cluster size
+    st->st_blocks = (de->file_size + fat.byts_per_clus - 1) / fat.byts_per_clus;
+}
+
 /**
  * Read filename from directory entry.
  * @param   buffer      pointer to the array that stores the name
@@ -932,4 +957,56 @@ struct dirent *ename(char *path)
 struct dirent *enameparent(char *path, char *name)
 {
     return lookup_path(path, 1, name);
+}
+
+// 从指定目录开始解析路径（用于 openat 的 dirfd 支持）
+struct dirent *enameat(struct dirent *dp, char *path)
+{
+    char name[FAT32_MAX_FILENAME + 1];
+    struct dirent *entry, *next;
+
+    if (*path == '/')
+        return ename(path);     // 绝对路径忽略 dp
+
+    entry = edup(dp);
+    while ((path = skipelem(path, name)) != 0) {
+        elock(entry);
+        if (!(entry->attribute & ATTR_DIRECTORY)) {
+            eunlock(entry); eput(entry); return NULL;
+        }
+        if ((next = dirlookup(entry, name, 0)) == 0) {
+            eunlock(entry); eput(entry); return NULL;
+        }
+        eunlock(entry); eput(entry);
+        entry = next;
+    }
+    return entry;
+}
+
+// 从指定目录开始解析父路径（用于 openat 的 dirfd + O_CREATE 支持）
+struct dirent *enameparentat(struct dirent *dp, char *path, char *name)
+{
+    struct dirent *entry, *next;
+
+    if (*path == '/')
+        return enameparent(path, name);
+
+    entry = edup(dp);
+    while ((path = skipelem(path, name)) != 0) {
+        elock(entry);
+        if (!(entry->attribute & ATTR_DIRECTORY)) {
+            eunlock(entry); eput(entry); return NULL;
+        }
+        if (*path == '\0') {
+            eunlock(entry);
+            return entry;
+        }
+        if ((next = dirlookup(entry, name, 0)) == 0) {
+            eunlock(entry); eput(entry); return NULL;
+        }
+        eunlock(entry); eput(entry);
+        entry = next;
+    }
+    eput(entry);
+    return NULL;
 }

@@ -173,6 +173,10 @@ sys_open(void)
   if(argstr(0, path, FAT32_MAX_PATH) < 0 || argint(1, &omode) < 0)
     return -1;
 
+  // O_DIRECTORY | O_CREATE 没有意义（open 不创建目录）
+  if((omode & O_CREATE) && (omode & O_DIRECTORY))
+    return -1;
+
   if(omode & O_CREATE){
     ep = create(path, T_FILE, omode);
     if(ep == NULL){
@@ -183,7 +187,14 @@ sys_open(void)
       return -1;
     }
     elock(ep);
-    if((ep->attribute & ATTR_DIRECTORY) && omode != O_RDONLY){
+    // 允许 O_RDONLY 或带 O_DIRECTORY 的只读目录访问
+    if((ep->attribute & ATTR_DIRECTORY) && (omode & ~O_DIRECTORY) != O_RDONLY){
+      eunlock(ep);
+      eput(ep);
+      return -1;
+    }
+    // O_DIRECTORY 要求目标必须是目录
+    if((omode & O_DIRECTORY) && !(ep->attribute & ATTR_DIRECTORY)){
       eunlock(ep);
       eput(ep);
       return -1;
@@ -706,66 +717,159 @@ sys_mkdirat(void)
   if(argint(0, &dirfd) < 0 || argaddr(1, &path) < 0 || argint(2, &mode) < 0){
     return -1;
   }
-  uint64 old_a0;
-  old_a0 = p->trapframe->a0;
-  p->trapframe->a0 = path;
-  uint64 ret = sys_mkdir();
-  p->trapframe->a0 = old_a0;
-  return ret;
+
+  if (dirfd == AT_FDCWD) {
+    uint64 old_a0;
+    old_a0 = p->trapframe->a0;
+    p->trapframe->a0 = path;
+    uint64 ret = sys_mkdir();
+    p->trapframe->a0 = old_a0;
+    return ret;
+  }
+
+  // 非 AT_FDCWD: 从指定目录 fd 解析路径并创建目录
+  struct file *dirf;
+  char pathbuf[FAT32_MAX_PATH];
+  struct dirent *dp, *ep;
+  char name[FAT32_MAX_FILENAME + 1];
+
+  if (fd_get(dirfd, &dirf) < 0)
+    return -1;
+  if (dirf->type != FD_ENTRY || !(dirf->ep->attribute & ATTR_DIRECTORY))
+    return -1;
+
+  if (fetchstr(path, pathbuf, FAT32_MAX_PATH) < 0)
+    return -1;
+
+  if ((dp = enameparentat(dirf->ep, pathbuf, name)) == NULL)
+    return -1;
+
+  elock(dp);
+  if ((ep = ealloc(dp, name, ATTR_DIRECTORY)) == NULL) {
+    eunlock(dp);
+    eput(dp);
+    return -1;
+  }
+  elock(ep);
+  if (!(ep->attribute & ATTR_DIRECTORY)) {
+    eunlock(ep);
+    eunlock(dp);
+    eput(ep);
+    eput(dp);
+    return -1;
+  }
+  eunlock(dp);
+  eput(dp);
+  eunlock(ep);
+  eput(ep);
+
+  return 0;
 }
-
-// Linux test flags/layouts used in testsuits-for-oskernel.
-#define LINUX_O_WRONLY          0x001
-#define LINUX_O_RDWR            0x002
-#define LINUX_O_CREAT           0x040
-#define LINUX_O_TRUNC           0x200
-#define LINUX_O_APPEND          0x400
-
-
-int
-linux_open_flags_to_xv6(int flags)
-{
-  int out = O_RDONLY;
-
-  if(flags & LINUX_O_RDWR)
-    out = O_RDWR;
-  else if(flags & LINUX_O_WRONLY)
-    out = O_WRONLY;
-
-  if(flags & LINUX_O_CREAT)
-    out |= O_CREATE;
-  if(flags & LINUX_O_TRUNC)
-    out |= O_TRUNC;
-  if(flags & LINUX_O_APPEND)
-    out |= O_APPEND;
-
-  return out;
-}
-
 
 uint64
 sys_openat(void)
 {
   int dirfd, flags;
-  uint64 path, mode;
+  uint64 path;
   uint64 old_a0, old_a1, ret;
   struct proc *p = myproc();
 
   if(argint(0, &dirfd) < 0 || argaddr(1, &path) < 0 ||
-     argint(2, &flags) < 0 || argaddr(3, &mode) < 0)
+     argint(2, &flags) < 0)
     return -1;
 
-  (void)dirfd;
-  (void)mode;
+  if (dirfd == AT_FDCWD) {
+    // AT_FDCWD: 从当前工作目录解析路径，委托给 sys_open
+    old_a0 = p->trapframe->a0;
+    old_a1 = p->trapframe->a1;
+    p->trapframe->a0 = path;
+    // Linux 和 xv6 的 open flags 值完全一致，直接透传
+    p->trapframe->a1 = flags;
+    ret = sys_open();
+    p->trapframe->a0 = old_a0;
+    p->trapframe->a1 = old_a1;
+    return ret;
+  }
 
-  old_a0 = p->trapframe->a0;
-  old_a1 = p->trapframe->a1;
-  p->trapframe->a0 = path;
-  p->trapframe->a1 = linux_open_flags_to_xv6(flags);
-  ret = sys_open();
-  p->trapframe->a0 = old_a0;
-  p->trapframe->a1 = old_a1;
-  return ret;
+  // 非 AT_FDCWD: 从指定目录 fd 解析路径
+  struct file *dirf;
+  char pathbuf[FAT32_MAX_PATH];
+  int fd, omode = flags;
+  struct file *f;
+  struct dirent *ep;
+
+  if (fd_get(dirfd, &dirf) < 0)
+    return -1;
+  if (dirf->type != FD_ENTRY || !(dirf->ep->attribute & ATTR_DIRECTORY))
+    return -1;
+
+  if (fetchstr(path, pathbuf, FAT32_MAX_PATH) < 0)
+    return -1;
+
+  // O_DIRECTORY | O_CREATE 没有意义（open 不创建目录）
+  if((omode & O_CREATE) && (omode & O_DIRECTORY))
+    return -1;
+
+  if(omode & O_CREATE){
+    struct dirent *dp;
+    char name[FAT32_MAX_FILENAME + 1];
+    int mode;
+
+    if((dp = enameparentat(dirf->ep, pathbuf, name)) == NULL)
+      return -1;
+
+    mode = 0;   // 默认模式：普通文件
+    elock(dp);
+    if ((ep = ealloc(dp, name, mode)) == NULL) {
+      eunlock(dp);
+      eput(dp);
+      return -1;
+    }
+    if ((ep->attribute & ATTR_DIRECTORY)) {
+      eunlock(dp);
+      eput(ep);
+      eput(dp);
+      return -1;
+    }
+    eunlock(dp);
+    eput(dp);
+    elock(ep);
+  } else {
+    if((ep = enameat(dirf->ep, pathbuf)) == NULL)
+      return -1;
+    elock(ep);
+    // 允许 O_RDONLY 或带 O_DIRECTORY 的只读目录访问
+    if((ep->attribute & ATTR_DIRECTORY) && (omode & ~O_DIRECTORY) != O_RDONLY){
+      eunlock(ep);
+      eput(ep);
+      return -1;
+    }
+    // O_DIRECTORY 要求目标必须是目录
+    if((omode & O_DIRECTORY) && !(ep->attribute & ATTR_DIRECTORY)){
+      eunlock(ep);
+      eput(ep);
+      return -1;
+    }
+  }
+
+  if((f = filealloc()) == NULL || (fd = fdalloc(f)) < 0){
+    if (f) fileclose(f);
+    eunlock(ep);
+    eput(ep);
+    return -1;
+  }
+
+  if(!(ep->attribute & ATTR_DIRECTORY) && (omode & O_TRUNC))
+    etrunc(ep);
+
+  f->type = FD_ENTRY;
+  f->off = (omode & O_APPEND) ? ep->file_size : 0;
+  f->ep = ep;
+  f->readable = !(omode & O_WRONLY);
+  f->writable = (omode & O_WRONLY) || (omode & O_RDWR);
+
+  eunlock(ep);
+  return fd;
 }
 
 // 分配指定的文件描述符
@@ -816,4 +920,190 @@ sys_dup2(void)
   
   filedup(f);
   return newfd;
+}
+
+uint64
+sys_dup3(void)
+{
+  // struct file *f;
+  int oldfd, newfd;
+  int flags;
+  struct proc *p = myproc();
+
+  uint64 old_a0, old_a1, ret;
+
+  // 获取参数：旧文件描述符和新的文件描述符
+  if(argint(0, &oldfd) < 0 || argint(1, &newfd) < 0 || argint(2, &flags) < 0)
+    return -1;
+
+  old_a0 = p->trapframe->a0;
+  old_a1 = p->trapframe->a1;
+  p->trapframe->a0 = oldfd;
+  p->trapframe->a1 = newfd;
+  ret = sys_dup2();
+  p->trapframe->a0 = old_a0;
+  p->trapframe->a1 = old_a1;
+  return ret;
+}
+
+uint64
+sys_getdents(void)
+{
+  struct file *f;
+  int fd, count;
+  uint64 buf;
+  struct dirent de;
+  int total = 0;
+
+  if(argfd(0, &fd, &f) < 0 || argaddr(1, &buf) < 0 || argint(2, &count) < 0)
+    return -1;
+
+  if(f->type != FD_ENTRY || !(f->ep->attribute & ATTR_DIRECTORY))
+    return -1;
+
+  elock(f->ep);
+
+  while (total + 32 < count) {
+    int cnt;
+    int ret;
+
+    memset(&de, 0, sizeof(de));
+    ret = enext(f->ep, &de, f->off, &cnt);
+    if (ret <= 0) {
+      if (ret == 0) {
+        f->off += cnt * 32;
+        continue;
+      }
+      break;
+    }
+    f->off += cnt * 32;
+
+    int headlen = offsetof(struct dirent64, d_name); 
+    int namelen = strlen(de.filename);
+    int reclen = headlen + namelen + 1;                      
+    reclen = (reclen + 7) & ~7;  
+
+    if (total + reclen > count)
+      break;
+
+    char entry[256];
+    struct dirent64 *d = (struct dirent64 *)entry;           
+    memset(d, 0, reclen);                                    
+    d->d_off    = f->off;                                    
+    d->d_reclen = reclen;                                    
+    d->d_type   = (de.attribute & ATTR_DIRECTORY) ? DT_DIR : DT_REG;                                                      
+    safestrcpy(d->d_name, de.filename, reclen - headlen);  
+
+    if (copyout2(buf + total, (char *)d, reclen) < 0) {
+      eunlock(f->ep);
+      return -1;
+    }
+    total += reclen;
+  }
+
+  eunlock(f->ep);
+  return total;
+}
+
+
+uint64
+sys_unlinkat(void)
+{
+  int dirfd, flags;
+  uint64 path;
+  // struct proc *p = myproc();
+  struct file *dirf;
+  struct dirent *ep;
+  char pathbuf[FAT32_MAX_PATH];
+
+  // 使用 argint 而非 argfd：a0 是 int 类型 dirfd，不是文件描述符
+  if (argint(0, &dirfd) < 0 || argaddr(1, &path) < 0 || argint(2, &flags) < 0)
+    return -1;
+
+  if (fetchstr(path, pathbuf, FAT32_MAX_PATH) < 0)
+    return -1;
+
+  // 禁止删除 "." 和 ".."
+  int len = strlen(pathbuf);
+  char *s = pathbuf + len - 1;
+  while (s >= pathbuf && *s == '/') s--;
+  if (s >= pathbuf && *s == '.' && (s == pathbuf || *--s == '/'))
+    return -1;
+
+  if (dirfd == AT_FDCWD) {
+    ep = ename(pathbuf);
+  } else {
+    if (fd_get(dirfd, &dirf) < 0)
+      return -1;
+    if (dirf->type != FD_ENTRY || !(dirf->ep->attribute & ATTR_DIRECTORY))
+      return -1;
+    ep = enameat(dirf->ep, pathbuf);
+  }
+  if (ep == NULL)
+    return -1;
+
+  elock(ep);
+  // 无 AT_REMOVEDIR 时不能删除目录
+  if (!(flags & AT_REMOVEDIR) && (ep->attribute & ATTR_DIRECTORY)) {
+    eunlock(ep); eput(ep); return -1;
+  }
+  // 有 AT_REMOVEDIR 时目标必须是目录
+  if ((flags & AT_REMOVEDIR) && !(ep->attribute & ATTR_DIRECTORY)) {
+    eunlock(ep); eput(ep); return -1;
+  }
+  // 非空目录不能删除
+  if ((ep->attribute & ATTR_DIRECTORY) && !isdirempty(ep)) {
+    eunlock(ep); eput(ep); return -1;
+  }
+
+  elock(ep->parent);
+  eremove(ep);
+  eunlock(ep->parent);
+  eunlock(ep);
+  eput(ep);
+
+  return 0;
+}
+
+uint64
+sys_mount(void)
+{
+  uint64 source_addr, target_addr, fstype_addr, data;
+  int flags;
+  char source[FAT32_MAX_PATH], target[FAT32_MAX_PATH], fstype[32];
+
+  if (argaddr(0, &source_addr) < 0 || argaddr(1, &target_addr) < 0 ||
+      argaddr(2, &fstype_addr) < 0 || argint(3, &flags) < 0 ||
+      argaddr(4, &data) < 0)
+    return -1;
+
+  if (fetchstr(source_addr, source, FAT32_MAX_PATH) < 0 ||
+      fetchstr(target_addr, target, FAT32_MAX_PATH) < 0 ||
+      fetchstr(fstype_addr, fstype, 32) < 0)
+    return -1;
+
+  // 验证挂载点存在且是目录
+  struct dirent *ep = ename(target);
+  if (ep == NULL)
+    return -1;
+  elock(ep);
+  int is_dir = (ep->attribute & ATTR_DIRECTORY);
+  eunlock(ep);
+  eput(ep);
+  if (!is_dir)
+    return -1;
+
+  return 0;
+}
+
+uint64
+sys_umount2(void)
+{
+  uint64 target_addr;
+  int flags;
+
+  if (argaddr(0, &target_addr) < 0 || argint(1, &flags) < 0)
+    return -1;
+
+  return 0;
 }
