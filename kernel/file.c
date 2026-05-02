@@ -113,6 +113,24 @@ filestat(struct file *f, uint64 addr)
   return -1;
 }
 
+int
+filestat2(struct file *f, uint64 addr)
+{
+  // struct proc *p = myproc();
+  struct stat2 st;
+
+  if(f->type == FD_ENTRY){
+    elock(f->ep);
+    estat2(f->ep, &st);
+    eunlock(f->ep);
+    // if(copyout(p->pagetable, addr, (char *)&st, sizeof(st)) < 0)
+    if(copyout2(addr, (char *)&st, sizeof(st)) < 0)
+      return -1;
+    return 0;
+  }
+  return -1;
+}
+
 // Read from file f.
 // addr is a user virtual address.
 int

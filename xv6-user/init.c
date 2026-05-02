@@ -15,44 +15,44 @@ char *argv[] = { 0 };
 #ifndef DISABLE_SYSCALL_TEST
 
 char *syscall_tests[] = {
-//   /* 1 */
-//   "write",
-//   "getpid",
-//   "getcwd",
-//   "times",
-//   "uname",
+  /* 1 */
+  "write",
+  "getpid",
+  "getcwd",
+  "times",
+  "uname",
 
-//   /* 2 */
-//   "fork",
-//   "execve",
-//   "exit",
-//   "clone",
-//   "wait",
-//   "yield",
-//   "waitpid",
-//   "getppid",
-//   "sleep",
-//   "gettimeofday",
+  /* 2 */
+  "fork",
+  "execve",
+  "exit",
+  "clone",
+  "wait",
+  "yield",
+  "waitpid",
+  "getppid",
+  "sleep",
+  "gettimeofday",
 
-//   /* 3 */
-//   "brk",
+  /* 3 */
+  "brk",
   "mmap",
   "munmap",
 
-//   /* 7 */
-//   "dup",
-//   "dup2",
-//   "pipe",
-//   "open",
-//   "openat",
-//   "close",
-//   "getdents",
-//   "read",
-//   "mkdir_",
-//   "chdir",
-//   "unlink",
-//   "mount",
-//   "umount",
+  /* 7 */
+  "dup",
+  "dup2",
+  "pipe",
+  "open",
+  "openat",
+  "close",
+  "getdents",
+  "read",
+  "mkdir_",
+  "chdir",
+  "unlink",
+  "mount",
+  "umount",
   "fstat",
 
 };

@@ -120,7 +120,7 @@ sys_fstat(void)
 
   if(argfd(0, 0, &f) < 0 || argaddr(1, &st) < 0)
     return -1;
-  return filestat(f, st);
+  return filestat2(f, st);
 }
 
 static struct dirent*
