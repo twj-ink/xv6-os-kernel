@@ -98,27 +98,54 @@ void run_scheduler_test(void) {
     char* program_name = TEST_PROGRAM;
 
 #if defined(TEST_COW) || defined(TEST_LAZY)
-    // Part 5: self-judging test（测试程序内自带评分逻辑）
+    // Part 5: pipe 捕获测试输出 + 评分
     printf("\ninit: starting Part 5 test [%s]\n", program_name);
+    int pipefd[2] = {0, 0};
+    if(pipe(pipefd) == -1) {
+        printf("init: pipe failed\n");
+        exit(1);
+    }
     pid = fork();
     if(pid < 0){
         printf("init: fork failed\n");
+        close(pipefd[0]);
+        close(pipefd[1]);
         exit(1);
     }
     if(pid == 0){
+        close(pipefd[0]);
+        close(1);
+        dup(pipefd[1]);
+        close(pipefd[1]);
         exec(program_name, argv);
         printf("init: exec %s failed\n", program_name);
         exit(1);
     }
-    for(;;){
-        wpid = wait(&status);
-        if(wpid == pid){
+    close(pipefd[1]);
+    int total = 0;
+    int chunk;
+    while((chunk = read(pipefd[0], test_outputs+total, MAX_OUTPUT_SIZE-1-total)) > 0)
+        total += chunk;
+    test_outputs[total] = '\0';
+    printf("testing output size:%d, contents:\n\n%s", total, test_outputs);
+    close(pipefd[0]);
+    wpid = wait(&status);
+    printf("\n\ninit: test execution completed, starting judger\n\n");
+
+    // Part 5 评分：检查输出是否包含 "Completed Successfully"
+    int score = 0;
+    char* rd = test_outputs;
+    while (*rd) {
+        if (*rd == 'C' && rd[1] == 'o' && rd[2] == 'm' && rd[3] == 'p' &&
+            rd[4] == 'l' && rd[5] == 'e' && rd[6] == 't' && rd[7] == 'e' &&
+            rd[8] == 'd' && rd[9] == ' ' && rd[10] == 'S' && rd[11] == 'u') {
+            score = 1;
             break;
-        } else if(wpid < 0){
-            printf("init: wait returned an error\n");
-            exit(1);
         }
+        rd++;
     }
+    printf("Test%s %s\n", program_name, score ? "PASSED" : "FAILED");
+    printf("SCORE: %d\n", score);
 #else
     // Part 4: pipe + judger 框架
     print_test_program(program_name);
