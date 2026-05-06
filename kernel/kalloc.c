@@ -12,6 +12,16 @@
 #include "include/string.h"
 #include "include/printf.h"
 
+// 每页一个引用计数（从 RAM 起始 0x80000000 偏移的页号索引）
+#define PA_BASE 0x80000000
+#define MAX_PAGE ((PHYSTOP - PA_BASE) / PGSIZE)
+static uint64 pageref[MAX_PAGE];
+static inline int pa_index(uint64 pa) {
+  return (int)((pa - PA_BASE) / PGSIZE);
+}
+
+static uint64 total_pages = 0;
+
 void freerange(void *pa_start, void *pa_end);
 
 extern char kernel_end[]; // first address after kernel.
@@ -33,6 +43,7 @@ kinit()
   kmem.freelist = 0;
   kmem.npage = 0;
   freerange(kernel_end, (void*)PHYSTOP);
+  total_pages = kmem.npage;
   #ifdef DEBUG
   printf("kernel_end: %p, phystop: %p\n", kernel_end, (void*)PHYSTOP);
   printf("kinit\n");
@@ -56,16 +67,25 @@ void
 kfree(void *pa)
 {
   struct run *r;
-  
+
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < kernel_end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
-  // Fill with junk to catch dangling refs.
-  memset(pa, 1, PGSIZE);
-
   r = (struct run*)pa;
+  int idx = pa_index((uint64)pa);
 
   acquire(&kmem.lock);
+
+  if (pageref[idx] > 0) {
+    pageref[idx]--;               // 先减 1
+    if (pageref[idx] > 0) {       // 还有其他人引用
+      release(&kmem.lock);
+      return;                     // 不真正回收
+    }
+    // refcount 归零：继续执行下面的入链逻辑
+  }
+  // 真正释放：入空闲链
+  memset(pa, 1, PGSIZE);
   r->next = kmem.freelist;
   kmem.freelist = r;
   kmem.npage++;
@@ -88,8 +108,10 @@ kalloc(void)
   }
   release(&kmem.lock);
 
-  if(r)
+  if(r) {
     memset((char*)r, 5, PGSIZE); // fill with junk
+    pageref[pa_index((uint64)r)] = 1; // 新分配，初始引用为1
+  }
   return (void*)r;
 }
 
@@ -97,4 +119,23 @@ uint64
 freemem_amount(void)
 {
   return kmem.npage << PGSHIFT;
+}
+
+uint64 
+get_allocated_pages(void)
+{
+  return total_pages - kmem.npage;
+}
+
+//引用计数操作函数
+void incref_page(uint64 pa) 
+{
+  acquire(&kmem.lock);
+  pageref[pa_index(pa)]++;
+  release(&kmem.lock);
+}
+
+int get_page_ref(uint64 pa)
+{
+  return pageref[pa_index(pa)];
 }

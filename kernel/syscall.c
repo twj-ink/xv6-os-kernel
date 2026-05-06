@@ -147,6 +147,14 @@ extern uint64 sys_get_priority(void);
 extern uint64 sys_set_priority(void);
 extern uint64 sys_get_priority(void);
 #endif
+#ifdef TEST_LAZY
+extern uint64 sys_getpgcnt(void);
+extern uint64 sys_getprocsz(void);
+#endif
+#ifdef TEST_COW
+extern uint64 sys_getpgcnt(void);
+extern uint64 sys_getprocsz(void);
+#endif
 
 static uint64 (*syscalls[])(void) = {
   [SYS_fork]        sys_fork,
@@ -205,6 +213,14 @@ static uint64 (*syscalls[])(void) = {
 #ifdef SCHEDULER_MLFQ
   [SYS_set_priority]  sys_set_priority,
   [SYS_get_priority]  sys_get_priority,
+#endif
+#ifdef TEST_LAZY
+  [SYS_getpgcnt]     sys_getpgcnt,
+  [SYS_getprocsz]    sys_getprocsz,
+#endif
+#ifdef TEST_COW
+  [SYS_getpgcnt]     sys_getpgcnt,
+  [SYS_getprocsz]    sys_getprocsz,
 #endif
 
 
@@ -268,6 +284,14 @@ static char *sysnames[] = {
 #ifdef SCHEDULER_MLFQ
   [SYS_set_priority]  "set_priority",
   [SYS_get_priority]  "get_priority",
+#endif
+#ifdef TEST_LAZY
+  [SYS_getpgcnt]     "getpgcnt",
+  [SYS_getprocsz]    "getprocsz",
+#endif
+#ifdef TEST_COW
+  [SYS_getpgcnt]     "getpgcnt",
+  [SYS_getprocsz]    "getprocsz",
 #endif
 };
 

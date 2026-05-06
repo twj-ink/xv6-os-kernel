@@ -15,45 +15,45 @@ char *argv[] = { 0 };
 #ifndef DISABLE_SYSCALL_TEST
 
 char *syscall_tests[] = {
-  /* 1 */
-  "write",
-  "getpid",
-  "getcwd",
-  "times",
-  "uname",
+//   /* 1 */
+//   "write",
+//   "getpid",
+//   "getcwd",
+//   "times",
+//   "uname",
 
-  /* 2 */
-  "fork",
-  "execve",
-  "exit",
-  "clone",
-  "wait",
-  "yield",
-  "waitpid",
-  "getppid",
-  "sleep",
-  "gettimeofday",
+//   /* 2 */
+//   "fork",
+//   "execve",
+//   "exit",
+//   "clone",
+//   "wait",
+//   "yield",
+//   "waitpid",
+//   "getppid",
+//   "sleep",
+//   "gettimeofday",
 
   /* 3 */
   "brk",
   "mmap",
   "munmap",
 
-  /* 7 */
-  "dup",
-  "dup2",
-  "pipe",
-  "open",
-  "openat",
-  "close",
-  "getdents",
-  "read",
-  "mkdir_",
-  "chdir",
-  "unlink",
-  "mount",
-  "umount",
-  "fstat",
+//   /* 7 */
+//   "dup",
+//   "dup2",
+//   "pipe",
+//   "open",
+//   "openat",
+//   "close",
+//   "getdents",
+//   "read",
+//   "mkdir_",
+//   "chdir",
+//   "unlink",
+//   "mount",
+//   "umount",
+//   "fstat",
 
 };
 
@@ -96,7 +96,31 @@ void run_scheduler_test(void) {
     int pid, wpid;
     int status;
     char* program_name = TEST_PROGRAM;
-    
+
+#ifdef TEST_PART5
+    // Part 5: self-judging test（测试程序内自带评分逻辑）
+    printf("\ninit: starting Part 5 test [%s]\n", program_name);
+    pid = fork();
+    if(pid < 0){
+        printf("init: fork failed\n");
+        exit(1);
+    }
+    if(pid == 0){
+        exec(program_name, argv);
+        printf("init: exec %s failed\n", program_name);
+        exit(1);
+    }
+    for(;;){
+        wpid = wait(&status);
+        if(wpid == pid){
+            break;
+        } else if(wpid < 0){
+            printf("init: wait returned an error\n");
+            exit(1);
+        }
+    }
+#else
+    // Part 4: pipe + judger 框架
     print_test_program(program_name);
     if (order[0]=='0') {
         exit(1);
@@ -126,7 +150,7 @@ void run_scheduler_test(void) {
         printf("init: exec %s failed\n", program_name);
         exit(1);
     }
-    
+
     close(pipefd[1]);
     int bytes_read = 0;
     int total_bytes = 0;
@@ -144,7 +168,7 @@ void run_scheduler_test(void) {
     if(wpid == -1) {
         printf("\ninit: no more child processes, break\n");
     } else if(wpid > 0) {
-        printf("\ninit: process pid=%d exited\n", wpid); 
+        printf("\ninit: process pid=%d exited\n", wpid);
     }
 
     printf("\ninit: test execution completed, starting judger\n\n");
@@ -162,6 +186,7 @@ void run_scheduler_test(void) {
     }
     wpid = wait(&status);
     printf("\ninit: judger completed\n");
+#endif
 }
 #endif
 

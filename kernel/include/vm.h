@@ -58,5 +58,7 @@ pte_t *         walk(pagetable_t pagetable, uint64 va, int alloc);
 struct vm_area* find_vma(struct proc *p, uint64 addr);
 struct vm_area* alloc_vma(struct proc *p);
 int handle_page_fault(struct proc *p, uint64 va, int cause);
+int cow_handler(struct proc *p, uint64 va);
+
 
 #endif 

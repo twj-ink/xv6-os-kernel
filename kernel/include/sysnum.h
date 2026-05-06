@@ -64,4 +64,6 @@
 #define SYS_get_priority    54324
 #define SYS_dup2        54321
 
+#define SYS_getpgcnt    55555
+#define SYS_getprocsz   55556        
 #endif

@@ -236,7 +236,8 @@ vmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     if((*pte & PTE_V) == 0) {
       // panic("vmunmap: not mapped");
       // printf("vmunmap: not mapped");
-      // [WARNING #3]
+      // [WARNING #3] 这意味着解除映射时，如果某个虚拟地址从未被映射
+      // （因为懒分配没实际分配页面），`vmunmap` 会正确跳过。
       continue;
     }
     if(PTE_FLAGS(*pte) == PTE_V)
@@ -375,38 +376,72 @@ uvmfree(pagetable_t pagetable, uint64 sz)
 int
 uvmcopy(pagetable_t old, pagetable_t new, pagetable_t knew, uint64 sz)
 {
+/* COW版本 */
   pte_t *pte;
-  uint64 pa, i = 0, ki = 0;
+  uint64 pa, i;
   uint flags;
-  char *mem;
 
-  while (i < sz){
+  for (i = 0; i < sz; i += PGSIZE) {
     if((pte = walk(old, i, 0)) == NULL)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
-    flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == NULL)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0) {
-      kfree(mem);
+
+    // 父进程页表：清除写权限，设置COW
+    *pte = (*pte & ~PTE_W) | PTE_COW;
+    // 增加物理页引用计数
+    incref_page(pa);
+    // 子进程页表：只读，设置COW，映射到同一个物理页
+    flags = PTE_FLAGS(*pte); // 呃，这个就是直接复制父进程的flags
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0) {
+      kfree((uint64*)pa);
       goto err;
     }
-    i += PGSIZE;
-    if(mappages(knew, ki, PGSIZE, (uint64)mem, flags & ~PTE_U) != 0){
+    if(mappages(knew, i, PGSIZE, (uint64)pa, flags & ~PTE_U) != 0){
       goto err;
     }
-    ki += PGSIZE;
   }
   return 0;
-
- err:
-  vmunmap(knew, 0, ki / PGSIZE, 0);
+err:
+  vmunmap(knew, 0, i / PGSIZE, 0);
   vmunmap(new, 0, i / PGSIZE, 1);
   return -1;
 }
+
+
+//   pte_t *pte;
+//   uint64 pa, i = 0, ki = 0;
+//   uint flags;
+//   char *mem;
+
+//   while (i < sz){
+//     if((pte = walk(old, i, 0)) == NULL)
+//       panic("uvmcopy: pte should exist");
+//     if((*pte & PTE_V) == 0)
+//       panic("uvmcopy: page not present");
+//     pa = PTE2PA(*pte);
+//     flags = PTE_FLAGS(*pte);
+//     if((mem = kalloc()) == NULL)
+//       goto err;
+//     memmove(mem, (char*)pa, PGSIZE);
+//     if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0) {
+//       kfree(mem);
+//       goto err;
+//     }
+//     i += PGSIZE;
+//     if(mappages(knew, ki, PGSIZE, (uint64)mem, flags & ~PTE_U) != 0){
+//       goto err;
+//     }
+//     ki += PGSIZE;
+//   }
+//   return 0;
+
+//  err:
+//   vmunmap(knew, 0, ki / PGSIZE, 0);
+//   vmunmap(new, 0, i / PGSIZE, 1);
+//   return -1;
+
 
 // mark a PTE invalid for user access.
 // used by exec for the user stack guard page.
@@ -702,79 +737,174 @@ handle_page_fault(struct proc *p, uint64 va, int cause)
   uint64 file_offset;
   
   // 1. 检查 VMA 是否存在
-  if (vma == NULL) {
-    printf("page fault: no VMA for va=%p\n", va);
-    return -1;
-  }
-  
-  // 2. 检查访问权限
-  if (cause == 13) {  // Load page fault (读)
-    if (!(vma->prot & PROT_READ)) {
-        printf("page fault: read permission denied\n");
-        return -1;
-    }
-  } else if (cause == 15) {  // Store page fault (写)
-    if (!(vma->prot & PROT_WRITE)) {
-        printf("page fault: write permission denied\n");
-        return -1;
-    }
-  } else {
-    printf("page fault: unknown cause %d\n", cause);
-    return -1;
-  }
-  
-  // 3. 分配物理页
-  mem = kalloc();
-  if (mem == NULL) {
-    printf("page fault: out of memory\n");
-    return -1;
-  }
-  // 注：先默认是匿名映射，把物理页都清零
-  memset(mem, 0, PGSIZE);
-  
-  // 4. 如果是文件映射，读取文件内容
-  // 每次读取一整页，va是当前需求的地址，a是页对齐后的地址，现在需要
-  // 把a到a+PGSIZE这一页文件内容读到mem中
-  if (vma->file != NULL) {
-    // 这里的file_offset就是原本保存的文件偏移+当前页的起始地址-映射的起始地址
-    // 比如说如果当前需求的va在第一页内，那么第二项就是0；
-    // 如果在第二页内，那么第二项就是一个PGSIZE，从而在文件中读取对应位置的内容
-    file_offset = vma->offset + (a - vma->start);
-    elock(vma->file->ep);
-    eread(vma->file->ep, 0, (uint64)mem, file_offset, PGSIZE);
-    eunlock(vma->file->ep);
-  }
-  
-  /* 接下来是建立页表映射，否则页表项的valid依旧是0，也就是说假如不建立页表映射
-   * 就会发生无限缺页异常循环
-   */
-  // 5. 计算用户页表权限
-  perm = PTE_U;
-  if (vma->prot & PROT_READ)
-    perm |= PTE_R;
-  if (vma->prot & PROT_WRITE)
-    perm |= PTE_W;
-  if (vma->prot & PROT_EXEC)
-    perm |= PTE_X;
-  
-  // 6. 映射用户页表
-  if (mappages(p->pagetable, a, PGSIZE, (uint64)mem, perm) != 0) {
-    printf("page fault: mappages failed\n");
-    kfree(mem);
-    return -1;
-  }
-  
-  // 7. 同时映射到内核页表（方便内核访问）
-  if (mappages(p->kpagetable, a, PGSIZE, (uint64)mem, (perm & ~PTE_U)) != 0) {
-    printf("page fault: kernel mappages failed\n");
-    vmunmap(p->pagetable, a, 1, 1);
-    kfree(mem);
-    p->killed = 1;
-    return -1;
-  }
-  
-  // printf("page fault: successfully mapped page at %p\n", a);
+  // if (vma == NULL) {
+  //   printf("page fault: no VMA for va=%p\n", va);
+  //   return -1;
+  // }
 
-  return 0;
+  if (vma != NULL) 
+  
+  {                                             
+      // ====== mmap 路径 ======                  
+      // 权限检查 + kalloc + 文件读取 + mappages                 
+    
+    // 2. 检查访问权限
+    if (cause == 13) {  // Load page fault (读)
+      if (!(vma->prot & PROT_READ)) {
+          printf("page fault: read permission denied\n");
+          return -1;
+      }
+    } else if (cause == 15) {  // Store page fault (写)
+      if (!(vma->prot & PROT_WRITE)) {
+          printf("page fault: write permission denied\n");
+          return -1;
+      }
+    } else {
+      printf("page fault: unknown cause %d\n", cause);
+      return -1;
+    }
+    
+    // 3. 分配物理页
+    mem = kalloc();
+    if (mem == NULL) {
+      printf("page fault: out of memory\n");
+      return -1;
+    }
+    // 注：先默认是匿名映射，把物理页都清零
+    memset(mem, 0, PGSIZE);
+    
+    // 4. 如果是文件映射，读取文件内容
+    // 每次读取一整页，va是当前需求的地址，a是页对齐后的地址，现在需要
+    // 把a到a+PGSIZE这一页文件内容读到mem中
+    if (vma->file != NULL) {
+      // 这里的file_offset就是原本保存的文件偏移+当前页的起始地址-映射的起始地址
+      // 比如说如果当前需求的va在第一页内，那么第二项就是0；
+      // 如果在第二页内，那么第二项就是一个PGSIZE，从而在文件中读取对应位置的内容
+      file_offset = vma->offset + (a - vma->start);
+      elock(vma->file->ep);
+      eread(vma->file->ep, 0, (uint64)mem, file_offset, PGSIZE);
+      eunlock(vma->file->ep);
+    }
+    
+    /* 接下来是建立页表映射，否则页表项的valid依旧是0，也就是说假如不建立页表映射
+    * 就会发生无限缺页异常循环
+    */
+    // 5. 计算用户页表权限
+    perm = PTE_U;
+    if (vma->prot & PROT_READ)
+      perm |= PTE_R;
+    if (vma->prot & PROT_WRITE)
+      perm |= PTE_W;
+    if (vma->prot & PROT_EXEC)
+      perm |= PTE_X;
+    
+    // 6. 映射用户页表
+    if (mappages(p->pagetable, a, PGSIZE, (uint64)mem, perm) != 0) {
+      printf("page fault: mappages failed\n");
+      kfree(mem);
+      return -1;
+    }
+    
+    // 7. 同时映射到内核页表（方便内核访问）
+    if (mappages(p->kpagetable, a, PGSIZE, (uint64)mem, (perm & ~PTE_U)) != 0) {
+      printf("page fault: kernel mappages failed\n");
+      vmunmap(p->pagetable, a, 1, 1);
+      kfree(mem);
+      p->killed = 1;
+      return -1;
+    }
+    
+    // printf("page fault: successfully mapped page at %p\n", a);
 
+    return 0;
+  }
+
+  else
+    // ====== sbrk 懒分配路径 ======
+  {
+    // 1. 对齐边界
+    va = PGROUNDDOWN(va);
+    // 2. 检验合法性
+    if (va >= p->sz) {
+      return -1; // 因为sz已经扩过了
+    }
+    // 3. 检测是否已经有映射，有就错误了
+    pte_t *pte = walk(p->pagetable, va, 0);
+    if (pte != NULL && (*pte & PTE_V) != 0) {
+      return -1;
+    }
+    // 4. 分配物理页
+    mem = kalloc();
+    if (mem == NULL)
+        return -1;   // 内存耗尽
+    memset(mem, 0, PGSIZE);
+    // 5. 设置权限，默认可读写
+    perm = PTE_U;
+    perm |= PTE_R | PTE_W;
+    // 6. 建立页表映射
+    if (mappages(p->pagetable, va, PGSIZE, (uint64)mem, perm) < 0) {
+      kfree(mem);
+      return -1;
+    }
+
+    // 7. 映射到内核页表
+    if (mappages(p->kpagetable, va, PGSIZE, (uint64)mem, perm) < 0) {
+      vmunmap(p->pagetable, va, 1, 0);   // 回滚用户页表
+      kfree(mem);
+      return -1;
+    }
+
+    return 0;
+  }
+
+}
+
+/*
+ * COW 缺页处理器
+ * @return  0 成功处理；-1 不是 COW 页面（交由其他 handler 处理）
+ */
+int cow_handler(struct proc *p, uint64 va) {
+    va = PGROUNDDOWN(va);
+
+    // ① 检查是否有有效 PTE
+    pte_t *pte = walk(p->pagetable, va, 0);
+    if (pte == NULL || !(*pte & PTE_V))
+        return -1;                    // 不是 COW → 交给后续处理
+
+    // ② 检查是否是 COW 页面
+    if (!(*pte & PTE_COW))
+        return -1;                    // 有映射但不是 COW → 交给后续处理
+
+    uint64 pa = PTE2PA(*pte);
+    uint flags = PTE_FLAGS(*pte);
+    int ref = get_page_ref(pa);
+
+    if (ref == 1) {
+        // ③ refcount == 1：仅当前进程持有，无需复制，直接恢复写权限
+        *pte = PA2PTE(pa) | (flags & ~PTE_COW) | PTE_W;
+        // 同步内核页表
+        pte_t *kpte = walk(p->kpagetable, va, 0);
+        if (kpte)
+            *kpte = PA2PTE(pa) | ((flags & ~PTE_COW & ~PTE_U) | PTE_W);
+        return 0;
+    }
+
+    // ④ refcount > 1：有其他进程也在共享，必须复制
+    char *mem = kalloc();
+    if (mem == NULL) return -1;
+    memmove(mem, (char*)pa, PGSIZE);
+
+    // 原物理页 refcount -1（当前进程不再引用它）
+    kfree((void*)pa);   // kfree 内部 refcount--，归零才真释放
+
+    // 新页映射：恢复 PTE_W，清除 PTE_COW
+    uint newflags = (flags & ~PTE_COW) | PTE_W;
+    *pte = PA2PTE((uint64)mem) | newflags;
+
+    // 同步内核页表
+    pte_t *kpte = walk(p->kpagetable, va, 0);
+    if (kpte)
+        *kpte = PA2PTE((uint64)mem) | (newflags & ~PTE_U);
+
+    return 0;
 }

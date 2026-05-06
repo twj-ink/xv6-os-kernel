@@ -593,6 +593,10 @@ sys_mmap(void)
     // 直接选择进程的末尾，注意这里要扩展进程自己的空间，否则copyin2会失败
     start = p->sz;
     p->sz += len;
+    //   growproc 调用 uvmalloc → kalloc × N → 映射零页。这些零页盖住了 mmap
+    // 的区域，后续访问不触发 PF，文件数据永远加载不上。                                                                     
+    // 所以不是"懒分配被破坏了"——是文件映射机制被完全绕过了。  
+    // growproc(len);
   }
   // If addr is not NULL, then the kernel takes it as  a  hint
   // about  where  to place the mapping; 

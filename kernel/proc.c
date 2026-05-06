@@ -390,9 +390,11 @@ growproc(int n)
 
   sz = p->sz;
   if(n > 0){
-    if((sz = uvmalloc(p->pagetable, p->kpagetable, sz, sz + n)) == 0) {
-      return -1;
-    }
+    // if((sz = uvmalloc(p->pagetable, p->kpagetable, sz, sz + n)) == 0) {
+    //   return -1;
+    // }
+    // 不要直接uvmalloc，因为它会直接修改页表，而是先修改proc的sz，等到下次访问时才真正分配内存并修改页表
+    sz += n; // 后续会触发page fault
   } else if(n < 0){
     sz = uvmdealloc(p->pagetable, p->kpagetable, sz, sz + n);
   }

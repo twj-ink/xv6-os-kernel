@@ -86,7 +86,12 @@ usertrap(void)
     // printf("page fault!!! scause: %d\n", r_scause());
     uint64 va = r_stval(); //触发异常的虚拟地址
     uint64 cause = r_scause();
-    if (handle_page_fault(p, va, cause) < 0) {  // vm.c: handle_page_fault
+    // 先尝试 COW 处理
+    if (cow_handler(p, va) == 0) {
+        // COW 成功处理，无需额外动作
+    }
+    // 再尝试 VMA / lazy allocation 处理
+    else if (handle_page_fault(p, va, cause) < 0) {  // vm.c: handle_page_fault
       printf("page fault at addr: %d, cause: %d\n", va, cause);
       exit(-1);
     }

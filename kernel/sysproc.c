@@ -526,3 +526,31 @@ sys_get_priority(void)
   return pri;
 }
 #endif
+#ifdef TEST_LAZY
+uint64
+sys_getpgcnt(void)
+{
+  return get_allocated_pages();
+}
+
+uint64
+sys_getprocsz(void)
+{
+  struct proc *p = myproc();
+  return p->sz;
+}
+#endif
+#ifdef TEST_COW
+uint64
+sys_getpgcnt(void)
+{
+  return get_allocated_pages();
+}
+
+uint64
+sys_getprocsz(void)
+{
+  struct proc *p = myproc();
+  return p->sz;
+}
+#endif
