@@ -71,71 +71,83 @@ endif
 
 CFLAGS += -D QEMU
 
-##### Part 4 & Part 5: 测试配置 #####
-# Part 4: 调度算法测试（SCHEDULER_TYPE=RR|PRIORITY|MLFQ）
+##### Part 4: 调度算法测试配置 #####
+# 默认调度器类型（简化版RR），仅在未设 TYPE 时生效
 SCHEDULER_TYPE ?= RR
-# Part 5: 内存/进程管理测试（TYPE=COW|LAZY）
+ifeq ($(TYPE),)
+
+# 根据调度器类型设置对应的测试程序
+ifeq ($(SCHEDULER_TYPE), RR)
+		TEST_PROGRAM = test_proc_rr
+		CFLAGS += -DSCHEDULER_RR
+else ifeq ($(SCHEDULER_TYPE), PRIORITY)
+		TEST_PROGRAM = test_proc_priority
+		CFLAGS += -DSCHEDULER_PRIORITY
+else ifeq ($(SCHEDULER_TYPE), MLFQ)
+		TEST_PROGRAM = test_proc_mlfq
+		CFLAGS += -DSCHEDULER_MLFQ
+else
+		$(error Unknown scheduler type: $(SCHEDULER_TYPE))
+endif
+
+# 将测试程序名编译进内核
+CFLAGS += -DTEST_PROGRAM=\"$(TEST_PROGRAM)\"
+
+# 用户程序编译标志
+USER_CFLAGS =
+
+# 如果启用了judger自动化测试框架
+ifeq ($(ENABLE_JUDGER), 1)
+		USER_CFLAGS += -DENABLE_JUDGER=1
+		# 传递调度器类型到用户程序
+		ifeq ($(SCHEDULER_TYPE), RR)
+			USER_CFLAGS += -DSCHEDULER_RR
+		else ifeq ($(SCHEDULER_TYPE), PRIORITY)
+			USER_CFLAGS += -DSCHEDULER_PRIORITY
+		else ifeq ($(SCHEDULER_TYPE), MLFQ)
+			USER_CFLAGS += -DSCHEDULER_MLFQ
+		endif
+		USER_CFLAGS += -DTEST_PROGRAM=\"$(TEST_PROGRAM)\"
+else
+		# 普通模式：传递调度器类型给用户程序
+		ifeq ($(SCHEDULER_TYPE), RR)
+			USER_CFLAGS += -DSCHEDULER_RR
+		else ifeq ($(SCHEDULER_TYPE), PRIORITY)
+			USER_CFLAGS += -DSCHEDULER_PRIORITY
+		else ifeq ($(SCHEDULER_TYPE), MLFQ)
+			USER_CFLAGS += -DSCHEDULER_MLFQ
+		endif
+		USER_CFLAGS += -DTEST_PROGRAM=\"$(TEST_PROGRAM)\"
+endif
+
+# 支持外部传入的用户编译标志
+USER_CFLAGS += $(EXTRA_CFLAGS)
+endif
+##### Part 4: 调度算法测试配置 #####
+
+##### Part 5: 内存/进程测试配置 #####
 TYPE ?=
 
 ifneq ($(TYPE),)
 	# ======== Part 5 ========
 	ifeq ($(TYPE), COW)
-		TEST_PROGRAM = test_mem_cow
-		CFLAGS += -DTEST_COW=1 -DTEST_PART5=1
+		override TEST_PROGRAM = test_mem_cow
+		CFLAGS += -DTEST_COW=1
+		USER_CFLAGS += -DTEST_COW=1
 	else ifeq ($(TYPE), LAZY)
-		TEST_PROGRAM = test_mem_lazy_allocation
-		CFLAGS += -DTEST_LAZY=1 -DTEST_PART5=1
+		override TEST_PROGRAM = test_mem_lazy_allocation
+		CFLAGS += -DTEST_LAZY=1
+		USER_CFLAGS += -DTEST_LAZY=1
 	else
 		$(error Unknown test type: $(TYPE))
 	endif
-else
-	# ======== Part 4 ========
-	ifeq ($(SCHEDULER_TYPE), RR)
-		TEST_PROGRAM = test_proc_rr
-		CFLAGS += -DSCHEDULER_RR
-	else ifeq ($(SCHEDULER_TYPE), PRIORITY)
-		TEST_PROGRAM = test_proc_priority
-		CFLAGS += -DSCHEDULER_PRIORITY
-	else ifeq ($(SCHEDULER_TYPE), MLFQ)
-		TEST_PROGRAM = test_proc_mlfq
-		CFLAGS += -DSCHEDULER_MLFQ
-	else
-		$(error Unknown scheduler type: $(SCHEDULER_TYPE))
-	endif
-endif
-
-CFLAGS += -DTEST_PROGRAM=\"$(TEST_PROGRAM)\"
-
-USER_CFLAGS =
-
-ifneq ($(TYPE),)
-	# -------- Part 5 用户标志 --------
-	ifeq ($(TYPE), COW)
-		USER_CFLAGS += -DTEST_COW=1
-	else ifeq ($(TYPE), LAZY)
-		USER_CFLAGS += -DTEST_LAZY=1
-	endif
-	ifeq ($(ENABLE_JUDGER), 1)
-		USER_CFLAGS += -DENABLE_JUDGER=1
-	endif
-	USER_CFLAGS += -DTEST_PART5=1 -DTEST_PROGRAM=\"$(TEST_PROGRAM)\"
-else
-	# -------- Part 4 用户标志 --------
-	ifeq ($(ENABLE_JUDGER), 1)
-		USER_CFLAGS += -DENABLE_JUDGER=1
-	endif
-	ifeq ($(SCHEDULER_TYPE), RR)
-		USER_CFLAGS += -DSCHEDULER_RR
-	else ifeq ($(SCHEDULER_TYPE), PRIORITY)
-		USER_CFLAGS += -DSCHEDULER_PRIORITY
-	else ifeq ($(SCHEDULER_TYPE), MLFQ)
-		USER_CFLAGS += -DSCHEDULER_MLFQ
-	endif
+	CFLAGS += -DTEST_PROGRAM=\"$(TEST_PROGRAM)\"
 	USER_CFLAGS += -DTEST_PROGRAM=\"$(TEST_PROGRAM)\"
+	ifeq ($(ENABLE_JUDGER), 1)
+		USER_CFLAGS += -DENABLE_JUDGER=1
+	endif
 endif
-
-USER_CFLAGS += $(EXTRA_CFLAGS)
-##### Part 4 & Part 5: 测试配置 #####
+##### Part 5: 内存/进程测试配置 #####
 
 LDFLAGS = -z max-page-size=4096
 
@@ -236,22 +248,16 @@ UPROGS=\
 	$U/_mv\
 
 ##### Part 4 & Part 5: 测试用例编译 #####
-# Part 4 需要 judger；Part 5 自评，仅编译测试程序
-ifeq ($(TYPE),)
 TESTCASES=\
 	$(TEST)/_judger\
 	$(TEST)/_$(TEST_PROGRAM)
-else
-TESTCASES=\
-	$(TEST)/_$(TEST_PROGRAM)
-endif
 
-# 编译测试用例的规则
+# 编译测试用例的规则（cc 生成 .o，ld 链接）
 $(TEST)/%: $(TEST)/%.c $(ULIB)
 	$(CC) $(USER_CFLAGS) -c -o $(TEST)/$*.o $(TEST)/$*.c
 	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $@ $(TEST)/$*.o $(ULIB)
 	@$(OBJDUMP) -S $@ > $(TEST)/$*.asm
-##### Part 4: 测试用例编译 #####
+##### Part 4 & Part 5: 测试用例编译 #####
 
 userprogs: $(UPROGS)
 

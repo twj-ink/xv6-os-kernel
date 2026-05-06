@@ -97,7 +97,7 @@ void run_scheduler_test(void) {
     int status;
     char* program_name = TEST_PROGRAM;
 
-#ifdef TEST_PART5
+#if defined(TEST_COW) || defined(TEST_LAZY)
     // Part 5: self-judging test（测试程序内自带评分逻辑）
     printf("\ninit: starting Part 5 test [%s]\n", program_name);
     pid = fork();
