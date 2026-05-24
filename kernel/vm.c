@@ -8,6 +8,8 @@
 #include "include/proc.h"
 #include "include/printf.h"
 #include "include/string.h"
+#include "include/swap.h"
+#include "include/timer.h"
 
 /*
  * the kernel's page table.
@@ -727,6 +729,8 @@ alloc_vma(struct proc *p)
   return NULL;
 }
 
+
+
 int
 handle_page_fault(struct proc *p, uint64 va, int cause)
 {
@@ -735,26 +739,115 @@ handle_page_fault(struct proc *p, uint64 va, int cause)
   char *mem;
   uint64 perm;
   uint64 file_offset;
-  
+
+#if defined(ALGO_FIFO) || defined(ALGO_LRU)
+  // Part 6: 查找链表式 VMA
+  struct VMA *vma6 = 0;
+  if (vma == NULL) {
+    for (vma6 = p->head.vm_next; vma6 != &p->head; vma6 = vma6->vm_next) {
+      if (va >= vma6->vm_start && va < vma6->vm_end) {
+        break;
+      }
+    }
+    if (vma6 == &p->head) vma6 = 0;
+  }
+#endif
+
   // 1. 检查 VMA 是否存在
   // if (vma == NULL) {
   //   printf("page fault: no VMA for va=%p\n", va);
   //   return -1;
   // }
 
-  if (vma != NULL) 
-  
-  {                                             
-      // ====== mmap 路径 ======                  
-      // 权限检查 + kalloc + 文件读取 + mappages                 
-    
+#if defined(ALGO_FIFO) || defined(ALGO_LRU)
+  if (vma6 != 0) {
+    // ====== Part 6: 链表 VMA 的 mmap 路径（含 swap） ======
+    int page_idx = (a - vma6->vm_start) / PGSIZE;
+
+    // 若已换出则先换入
+    if (vma6->pages[page_idx].state == PAGE_STATE_SWAPPED)
+        swap_in6(p, vma6, page_idx);
+
+    // 统计当前在内存中的页数
+    int in_mem = 0;
+    for (int i = 0; i < vma6->npages; i++)
+        if (vma6->pages[i].state == PAGE_STATE_IN_MEM) in_mem++;
+
+    // 若已达上限且当前页尚未分配物理页，或是 swap_in 导致超限，换出一个 victim
+    while (p->max_page_in_mem > 0 && in_mem > p->max_page_in_mem) {
+        int victim = -1;
+        uint64 t = ~0ULL;
+        for (int i = 0; i < vma6->npages; i++) {
+            if (i == page_idx) continue;
+            if (vma6->pages[i].state != PAGE_STATE_IN_MEM) continue;
+#ifdef ALGO_FIFO
+            if (vma6->pages[i].entry_time < t) { t = vma6->pages[i].entry_time; victim = i; }
+#elif defined(ALGO_LRU)
+            if (vma6->pages[i].last_access < t) { t = vma6->pages[i].last_access; victim = i; }
+#endif
+        }
+        if (victim < 0) break;
+        swap_out6(p, vma6, victim);
+        in_mem--;
+    }
+    if (p->max_page_in_mem > 0 && in_mem >= p->max_page_in_mem &&
+        vma6->pages[page_idx].state != PAGE_STATE_IN_MEM) {
+        int victim = -1;
+        uint64 t = ~0ULL;
+        for (int i = 0; i < vma6->npages; i++) {
+            if (i == page_idx) continue;
+            if (vma6->pages[i].state != PAGE_STATE_IN_MEM) continue;
+#ifdef ALGO_FIFO
+            if (vma6->pages[i].entry_time < t) { t = vma6->pages[i].entry_time; victim = i; }
+#elif defined(ALGO_LRU)
+            if (vma6->pages[i].last_access < t) { t = vma6->pages[i].last_access; victim = i; }
+#endif
+        }
+        if (victim >= 0) swap_out6(p, vma6, victim);
+    }
+
+    // 已经 IN_MEM（来自 swap_in 且没有超过限额被换出的情况）
+    if (vma6->pages[page_idx].state == PAGE_STATE_IN_MEM)
+        return 0;
+
+    // 分配物理页 + 映射
+    perm = PTE_U;
+    if (vma6->prot & PROT_READ)  perm |= PTE_R;
+    if (vma6->prot & PROT_WRITE) perm |= PTE_W;
+    if (vma6->prot & PROT_EXEC)  perm |= PTE_X;
+
+    mem = kalloc();
+    if (mem == NULL) { printf("page fault: out of memory\n"); return -1; }
+    memset(mem, 0, PGSIZE);
+
+    if (mappages(p->pagetable, a, PGSIZE, (uint64)mem, perm) != 0 ||
+        mappages(p->kpagetable, a, PGSIZE, (uint64)mem, (perm & ~PTE_U)) != 0) {
+      kfree(mem);
+      return -1;
+    }
+
+    vma6->pages[page_idx].state = PAGE_STATE_IN_MEM;
+#ifdef ALGO_FIFO
+    vma6->pages[page_idx].entry_time = ticks;
+#elif defined(ALGO_LRU)
+    vma6->pages[page_idx].last_access = ticks;
+#endif
+    return 0;
+  }
+#endif
+
+  if (vma != NULL)
+
+  {
+      // ====== mmap 路径 ======
+
     // 2. 检查访问权限
-    if (cause == 13) {  // Load page fault (读)
+    if (cause == 13) {
       if (!(vma->prot & PROT_READ)) {
           printf("page fault: read permission denied\n");
           return -1;
       }
-    } else if (cause == 15) {  // Store page fault (写)
+    } else if (cause == 15) {
       if (!(vma->prot & PROT_WRITE)) {
           printf("page fault: write permission denied\n");
           return -1;
@@ -763,33 +856,22 @@ handle_page_fault(struct proc *p, uint64 va, int cause)
       printf("page fault: unknown cause %d\n", cause);
       return -1;
     }
-    
+
     // 3. 分配物理页
     mem = kalloc();
     if (mem == NULL) {
       printf("page fault: out of memory\n");
       return -1;
     }
-    // 注：先默认是匿名映射，把物理页都清零
     memset(mem, 0, PGSIZE);
-    
-    // 4. 如果是文件映射，读取文件内容
-    // 每次读取一整页，va是当前需求的地址，a是页对齐后的地址，现在需要
-    // 把a到a+PGSIZE这一页文件内容读到mem中
+
     if (vma->file != NULL) {
-      // 这里的file_offset就是原本保存的文件偏移+当前页的起始地址-映射的起始地址
-      // 比如说如果当前需求的va在第一页内，那么第二项就是0；
-      // 如果在第二页内，那么第二项就是一个PGSIZE，从而在文件中读取对应位置的内容
       file_offset = vma->offset + (a - vma->start);
       elock(vma->file->ep);
       eread(vma->file->ep, 0, (uint64)mem, file_offset, PGSIZE);
       eunlock(vma->file->ep);
     }
-    
-    /* 接下来是建立页表映射，否则页表项的valid依旧是0，也就是说假如不建立页表映射
-    * 就会发生无限缺页异常循环
-    */
-    // 5. 计算用户页表权限
+
     perm = PTE_U;
     if (vma->prot & PROT_READ)
       perm |= PTE_R;
@@ -797,15 +879,13 @@ handle_page_fault(struct proc *p, uint64 va, int cause)
       perm |= PTE_W;
     if (vma->prot & PROT_EXEC)
       perm |= PTE_X;
-    
-    // 6. 映射用户页表
+
     if (mappages(p->pagetable, a, PGSIZE, (uint64)mem, perm) != 0) {
       printf("page fault: mappages failed\n");
       kfree(mem);
       return -1;
     }
-    
-    // 7. 同时映射到内核页表（方便内核访问）
+
     if (mappages(p->kpagetable, a, PGSIZE, (uint64)mem, (perm & ~PTE_U)) != 0) {
       printf("page fault: kernel mappages failed\n");
       vmunmap(p->pagetable, a, 1, 1);
@@ -813,8 +893,6 @@ handle_page_fault(struct proc *p, uint64 va, int cause)
       p->killed = 1;
       return -1;
     }
-    
-    // printf("page fault: successfully mapped page at %p\n", a);
 
     return 0;
   }
@@ -908,3 +986,94 @@ int cow_handler(struct proc *p, uint64 va) {
 
     return 0;
 }
+
+#if defined(ALGO_FIFO) || defined(ALGO_LRU)
+// FIFO / LRU 共用选择逻辑：仅比较的字段不同
+// 需要在 vm.h 和 sysproc.c 中声明 extern uint ticks;
+int
+select_victim_page(struct vm_area *vma)
+{
+    int victim = -1;
+    uint64 best = ~0ULL;
+
+    for (int i = 0; i < vma->npages; i++) {
+        if (vma->pages[i].state != PAGE_STATE_IN_MEM)
+            continue;
+
+#ifdef ALGO_FIFO
+        if (vma->pages[i].entry_time < best) {
+            best = vma->pages[i].entry_time;
+            victim = i;
+        }
+#elif defined(ALGO_LRU)
+        if (vma->pages[i].last_access < best) {
+            best = vma->pages[i].last_access;
+            victim = i;
+        }
+#endif
+    }
+    return victim;
+}
+
+#if defined(ALGO_FIFO) || defined(ALGO_LRU)
+int
+select_victim_page6(struct VMA *vma)
+{
+    int victim = -1;
+    uint64 best = ~0ULL;
+    for (int i = 0; i < vma->npages; i++) {
+        if (vma->pages[i].state != PAGE_STATE_IN_MEM) continue;
+#ifdef ALGO_FIFO
+        if (vma->pages[i].entry_time < best) { best = vma->pages[i].entry_time; victim = i; }
+#elif defined(ALGO_LRU)
+        if (vma->pages[i].last_access < best) { best = vma->pages[i].last_access; victim = i; }
+#endif
+    }
+    return victim;
+}
+
+void
+swap_out6(struct proc *p, struct VMA *vma, int page_idx)
+{
+    uint64 va = vma->vm_start + page_idx * PGSIZE;
+    int slot = alloc_global_swap_slot(p->pid, va);
+    if (slot < 0) panic("swap_out: no free slot");
+    pte_t *pte = walk(p->pagetable, va, 0);
+    if (pte == NULL || !(*pte & PTE_V)) panic("swap_out: page not present");
+    uint64 pa = PTE2PA(*pte);
+    copy_to_swap_slot(slot, (void*)pa);
+    kfree((void*)pa);
+    *pte = 0;
+    // 同时清除内核页表 PTE
+    pte_t *kpte = walk(p->kpagetable, va, 0);
+    if (kpte) *kpte = 0;
+    vma->pages[page_idx].state = PAGE_STATE_SWAPPED;
+    vma->pages[page_idx].swap_slot = slot;
+    p->page_swap_count++;
+}
+
+void
+swap_in6(struct proc *p, struct VMA *vma, int page_idx)
+{
+    uint64 va = vma->vm_start + page_idx * PGSIZE;
+    int slot = vma->pages[page_idx].swap_slot;
+    char *mem = kalloc();
+    if (mem == NULL) panic("swap_in: kalloc failed");
+    copy_from_swap_slot(slot, mem);
+    int perm = PTE_U | PTE_R | PTE_W;
+    if (mappages(p->pagetable, va, PGSIZE, (uint64)mem, perm) != 0 ||
+        mappages(p->kpagetable, va, PGSIZE, (uint64)mem, (perm & ~PTE_U)) != 0) {
+      kfree(mem);
+      return;
+    }
+    free_global_swap_slot(slot);
+    vma->pages[page_idx].state = PAGE_STATE_IN_MEM;
+    vma->pages[page_idx].swap_slot = -1;
+#ifdef ALGO_FIFO
+    vma->pages[page_idx].entry_time = ticks;
+#elif defined(ALGO_LRU)
+    vma->pages[page_idx].last_access = ticks;
+#endif
+}
+#endif
+#endif

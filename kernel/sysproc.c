@@ -15,6 +15,7 @@
 #include "include/vm.h"
 
 extern int exec(char *path, char **argv);
+extern uint ticks;
 
 uint64
 sys_exec(void)
@@ -552,5 +553,69 @@ sys_getprocsz(void)
 {
   struct proc *p = myproc();
   return p->sz;
+}
+#endif
+
+#ifdef ALGO_FIFO
+uint64
+sys_set_max_page_in_mem(void)
+{
+  int n;
+  if (argint(0, &n) < 0) return -1;
+  struct proc *p = myproc();
+  p->max_page_in_mem = n;
+  return 0;
+}
+
+uint64
+sys_get_swap_count(void)
+{
+  return myproc()->page_swap_count;
+}
+#endif
+
+#ifdef ALGO_LRU
+uint64
+sys_set_max_page_in_mem(void)
+{
+  int n;
+  if (argint(0, &n) < 0) return -1;
+  struct proc *p = myproc();
+  p->max_page_in_mem = n;
+  return 0;
+}
+
+uint64
+sys_get_swap_count(void)
+{
+  return myproc()->page_swap_count;
+}
+
+uint64
+sys_lru_access_notify(void)
+{
+  uint64 addr;
+  if (argaddr(0, &addr) < 0) return -1;
+
+  struct proc *p = myproc();
+#if defined(ALGO_FIFO) || defined(ALGO_LRU)
+  // Part 6: 搜索链表式 VMA
+  struct VMA *vma6;
+  for (vma6 = p->head.vm_next; vma6 != &p->head; vma6 = vma6->vm_next) {
+    if (addr >= vma6->vm_start && addr < vma6->vm_end) {
+      int page_idx = (PGROUNDDOWN(addr) - vma6->vm_start) / PGSIZE;
+      if (page_idx >= 0 && page_idx < vma6->npages)
+        vma6->pages[page_idx].last_access = ticks;
+      return 0;
+    }
+  }
+#else
+  struct vm_area *vma = find_vma(p, addr);
+  if (vma == NULL) return -1;
+  int page_idx = (PGROUNDDOWN(addr) - vma->start) / PGSIZE;
+  if (page_idx >= 0 && page_idx < vma->npages)
+      vma->pages[page_idx].last_access = ticks;
+#endif
+  return 0;
 }
 #endif

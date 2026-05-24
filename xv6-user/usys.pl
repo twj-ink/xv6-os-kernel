@@ -67,3 +67,7 @@ entry("get_priority");
 
 entry("getpgcnt");
 entry("getprocsz");
+
+entry("set_max_page_in_mem");
+entry("get_swap_count");
+entry("lru_access_notify");

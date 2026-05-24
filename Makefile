@@ -36,7 +36,9 @@ OBJS += \
   $K/disk.o \
   $K/fat32.o \
   $K/plic.o \
-  $K/console.o
+  $K/console.o \
+  $K/swap.o \
+  $K/vma_util.o
 
 OBJS += \
   $K/virtio_disk.o \
@@ -75,6 +77,7 @@ CFLAGS += -D QEMU
 # 默认调度器类型（简化版RR），仅在未设 TYPE 时生效
 SCHEDULER_TYPE ?= RR
 ifeq ($(TYPE),)
+ifeq ($(ALGO),)
 
 # 根据调度器类型设置对应的测试程序
 ifeq ($(SCHEDULER_TYPE), RR)
@@ -123,6 +126,7 @@ endif
 # 支持外部传入的用户编译标志
 USER_CFLAGS += $(EXTRA_CFLAGS)
 endif
+endif
 ##### Part 4: 调度算法测试配置 #####
 
 ##### Part 5: 内存/进程测试配置 #####
@@ -148,6 +152,29 @@ ifneq ($(TYPE),)
 	endif
 endif
 ##### Part 5: 内存/进程测试配置 #####
+
+##### Part 6: 页面置换算法测试配置 #####
+ALGO ?=
+
+ifneq ($(ALGO),)
+	ifeq ($(ALGO), FIFO)
+		override TEST_PROGRAM = test_vm_fifo
+		CFLAGS += -DALGO_FIFO
+		USER_CFLAGS += -DALGO_FIFO
+	else ifeq ($(ALGO), LRU)
+		override TEST_PROGRAM = test_vm_lru
+		CFLAGS += -DALGO_LRU
+		USER_CFLAGS += -DALGO_LRU
+	else
+		$(error Unknown algo: $(ALGO))
+	endif
+	CFLAGS += -DTEST_PROGRAM=\"$(TEST_PROGRAM)\"
+	USER_CFLAGS += -DTEST_PROGRAM=\"$(TEST_PROGRAM)\"
+	ifeq ($(ENABLE_JUDGER), 1)
+		USER_CFLAGS += -DENABLE_JUDGER=1
+	endif
+endif
+##### Part 6: 页面置换算法测试配置 #####
 
 LDFLAGS = -z max-page-size=4096
 
@@ -361,4 +388,11 @@ test-cow:
 
 test-lazy:
 	@$(MAKE) run_test TYPE=LAZY
-##### Part 4 & Part 5: 自动化测试命令 #####
+
+# Part 6 快捷命令
+test-fifo:
+	@$(MAKE) run_test ALGO=FIFO
+
+test-lru:
+	@$(MAKE) run_test ALGO=LRU
+##### Part 4 & Part 5 & Part 6: 自动化测试命令 #####

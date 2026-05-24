@@ -13,6 +13,7 @@
 #include "include/trap.h"
 #include "include/proc.h"
 #include "include/plic.h"
+#include "include/swap.h"
 #include "include/vm.h"
 #include "include/disk.h"
 #include "include/buf.h"
@@ -41,6 +42,7 @@ main(unsigned long hartid, unsigned long dtb_pa)
     printf("hart %d enter main()...\n", hartid);
     #endif
     kinit();         // physical page allocator
+    swap_init();     // swap area for page replacement
     kvminit();       // create kernel page table
     kvminithart();   // turn on paging
     timerinit();     // init a lock for timer

@@ -80,12 +80,18 @@ void print_test_program(const char* program_name) {
 #ifdef SCHEDULER_RR
     printf("[Round Robin]");
     order = "1";
-#elif defined(SCHEDULER_PRIORITY)  
+#elif defined(SCHEDULER_PRIORITY)
     printf("[Priority]");
     order = "2";
 #elif defined(SCHEDULER_MLFQ)
     printf("[MLFQ]");
     order = "3";
+#elif defined(ALGO_FIFO)
+    printf("[FIFO]");
+    order = "1";
+#elif defined(ALGO_LRU)
+    printf("[LRU]");
+    order = "2";
 #else
     printf("Unknown");
 #endif
@@ -98,32 +104,19 @@ void run_scheduler_test(void) {
     char* program_name = TEST_PROGRAM;
 
 #if defined(TEST_COW) || defined(TEST_LAZY)
-    // Part 5: pipe 捕获测试输出 + 评分
+    // -------- Part 5: pipe + 内联评分 --------
     printf("\ninit: starting Part 5 test [%s]\n", program_name);
     int pipefd[2] = {0, 0};
-    if(pipe(pipefd) == -1) {
-        printf("init: pipe failed\n");
-        exit(1);
-    }
+    if(pipe(pipefd) == -1) { printf("init: pipe failed\n"); exit(1); }
     pid = fork();
-    if(pid < 0){
-        printf("init: fork failed\n");
-        close(pipefd[0]);
-        close(pipefd[1]);
-        exit(1);
-    }
+    if(pid < 0){ printf("init: fork failed\n"); close(pipefd[0]); close(pipefd[1]); exit(1); }
     if(pid == 0){
-        close(pipefd[0]);
-        close(1);
-        dup(pipefd[1]);
-        close(pipefd[1]);
+        close(pipefd[0]); close(1); dup(pipefd[1]); close(pipefd[1]);
         exec(program_name, argv);
-        printf("init: exec %s failed\n", program_name);
-        exit(1);
+        printf("init: exec %s failed\n", program_name); exit(1);
     }
     close(pipefd[1]);
-    int total = 0;
-    int chunk;
+    int total = 0, chunk;
     while((chunk = read(pipefd[0], test_outputs+total, MAX_OUTPUT_SIZE-1-total)) > 0)
         total += chunk;
     test_outputs[total] = '\0';
@@ -131,23 +124,52 @@ void run_scheduler_test(void) {
     close(pipefd[0]);
     wpid = wait(&status);
     printf("\n\ninit: test execution completed, starting judger\n\n");
-
-    // Part 5 评分：检查输出是否包含 "Completed Successfully"
     int score = 0;
     char* rd = test_outputs;
     while (*rd) {
         if (*rd == 'C' && rd[1] == 'o' && rd[2] == 'm' && rd[3] == 'p' &&
             rd[4] == 'l' && rd[5] == 'e' && rd[6] == 't' && rd[7] == 'e' &&
             rd[8] == 'd' && rd[9] == ' ' && rd[10] == 'S' && rd[11] == 'u') {
-            score = 1;
-            break;
+            score = 1; break;
         }
         rd++;
     }
     printf("Test%s %s\n", program_name, score ? "PASSED" : "FAILED");
     printf("SCORE: %d\n", score);
+
+#elif defined(ALGO_FIFO) || defined(ALGO_LRU)
+    // -------- Part 6: pipe + judger 框架 --------
+    print_test_program(program_name);
+    if (order[0]=='0') { exit(1); }
+    printf("init: starting [%s]\n", program_name);
+    int pipefd6[2] = {0, 0};
+    if(pipe(pipefd6) == -1) { printf("init: pipe failed\n"); exit(1); }
+    pid = fork();
+    if(pid < 0){ printf("init: fork failed\n"); close(pipefd6[0]); close(pipefd6[1]); exit(1); }
+    if(pid == 0){
+        close(pipefd6[0]); close(1); dup(pipefd6[1]); close(pipefd6[1]);
+        exec(program_name, argv);
+        printf("init: exec %s failed\n", program_name); exit(1);
+    }
+    close(pipefd6[1]);
+    int total6 = 0, chunk6;
+    while((chunk6 = read(pipefd6[0], test_outputs+total6, MAX_OUTPUT_SIZE-1-total6)) > 0)
+        total6 += chunk6;
+    test_outputs[total6] = '\0';
+    printf("testing output size:%d, contents:\n\n%s", total6, test_outputs);
+    close(pipefd6[0]);
+    wpid = wait(&status);
+    printf("\ninit: process pid=%d exited\n", wpid);
+    printf("\ninit: test execution completed, starting judger\n\n");
+    char *jargv6[4];
+    jargv6[0] = "judger"; jargv6[1] = order; jargv6[2] = test_outputs; jargv6[3] = 0;
+    pid = fork();
+    if(pid==0) { exec("judger", jargv6); printf("exec judger failed\n"); exit(1); }
+    wpid = wait(&status);
+    printf("\ninit: judger completed\n");
+
 #else
-    // Part 4: pipe + judger 框架
+    // -------- Part 4: pipe + judger 框架 --------
     print_test_program(program_name);
     if (order[0]=='0') {
         exit(1);

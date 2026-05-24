@@ -155,6 +155,15 @@ extern uint64 sys_getprocsz(void);
 extern uint64 sys_getpgcnt(void);
 extern uint64 sys_getprocsz(void);
 #endif
+#ifdef ALGO_FIFO
+extern uint64 sys_set_max_page_in_mem(void);
+extern uint64 sys_get_swap_count(void);
+#endif
+#ifdef ALGO_LRU
+extern uint64 sys_set_max_page_in_mem(void);
+extern uint64 sys_get_swap_count(void);
+extern uint64 sys_lru_access_notify(void);
+#endif
 
 static uint64 (*syscalls[])(void) = {
   [SYS_fork]        sys_fork,
@@ -221,6 +230,15 @@ static uint64 (*syscalls[])(void) = {
 #ifdef TEST_COW
   [SYS_getpgcnt]     sys_getpgcnt,
   [SYS_getprocsz]    sys_getprocsz,
+#endif
+#ifdef ALGO_FIFO
+  [SYS_set_max_page_in_mem] sys_set_max_page_in_mem,
+  [SYS_get_swap_count] sys_get_swap_count,
+#endif
+#ifdef ALGO_LRU
+  [SYS_set_max_page_in_mem] sys_set_max_page_in_mem,
+  [SYS_get_swap_count] sys_get_swap_count,
+  [SYS_lru_access_notify] sys_lru_access_notify,
 #endif
 
 
@@ -293,6 +311,16 @@ static char *sysnames[] = {
   [SYS_getpgcnt]     "getpgcnt",
   [SYS_getprocsz]    "getprocsz",
 #endif
+#ifdef ALGO_FIFO
+  [SYS_set_max_page_in_mem] "set_max_page_in_mem",
+  [SYS_get_swap_count] "get_swap_count",
+#endif
+#ifdef ALGO_LRU
+  [SYS_set_max_page_in_mem] "set_max_page_in_mem",
+  [SYS_get_swap_count] "get_swap_count",
+  [SYS_lru_access_notify] "lru_access_notify",  
+#endif
+
 };
 
 void

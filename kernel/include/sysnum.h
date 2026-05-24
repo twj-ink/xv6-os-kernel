@@ -65,5 +65,9 @@
 #define SYS_dup2        54321
 
 #define SYS_getpgcnt    55555
-#define SYS_getprocsz   55556        
+#define SYS_getprocsz   55556
+
+#define SYS_set_max_page_in_mem 55557
+#define SYS_get_swap_count      55558
+#define SYS_lru_access_notify   55559
 #endif

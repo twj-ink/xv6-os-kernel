@@ -8,6 +8,7 @@
 #include "include/types.h"
 #include "include/riscv.h"
 #include "include/param.h"
+#include "include/memlayout.h"
 #include "include/stat.h"
 #include "include/spinlock.h"
 #include "include/proc.h"
@@ -20,6 +21,8 @@
 #include "include/string.h"
 #include "include/printf.h"
 #include "include/vm.h"
+#include "include/kalloc.h"
+#include "include/swap.h"
 
 #include <stddef.h>
 
@@ -570,6 +573,107 @@ fd_get(int fd, struct file **pf)
   return 0;
 }
 
+#if defined(ALGO_FIFO) || defined(ALGO_LRU)
+
+/* Part 6: 参考实现的 mmap/munmap（链表式 VMA） */
+static uint64
+mymmap(int fd, uint64 addr, uint64 len, int prot, int flags, uint64 offset)
+{
+  struct proc *p = myproc();
+  struct VMA *vma;
+  uint64 start = p->sz, end = TRAPFRAME;
+  if(start-end < len) addr = (uint64)-1;
+
+  for(vma = p->head.vm_next; vma != &p->head; vma = vma->vm_next)
+  {
+    if(end-vma->vm_end >= len) break;
+    end = vma->vm_start;
+  }
+  if(start-end < len) addr = (uint64)-1;
+  addr = end-len;
+
+  if((vma=allocshare())==0) return -1;
+  vma->vm_start = addr;
+  vma->vm_end = vma->vm_start+len;
+  vma->prot = prot;
+  vma->flags = flags;
+  vma->vm_off = offset;
+
+  // Part 6: 初始化 per-page 元数据
+  int np = len / PGSIZE;
+  vma->npages = np;
+  for (int i = 0; i < np; i++) {
+    vma->pages[i].state = PAGE_STATE_UNUSED;
+    vma->pages[i].swap_slot = -1;
+    vma->pages[i].entry_time = 0;
+    vma->pages[i].last_access = 0;
+  }
+
+  struct VMA *cnt;
+  for(cnt = p->head.vm_next; cnt != &p->head; cnt = cnt->vm_next)
+    if(cnt->vm_start < vma->vm_start) break;
+  cnt->vm_prev->vm_next = vma;
+  vma->vm_prev = cnt->vm_prev;
+  vma->vm_next = cnt;
+  cnt->vm_prev = vma;
+
+  return addr;
+}
+
+uint64
+sys_mmap(void)
+{
+  uint64 addr;
+  int len, prot, flags, offset, fd;
+
+  if(argaddr(0,&addr) < 0 || argint(1,&len) < 0 || argint(2,&prot) < 0
+  || argint(3,&flags) < 0 || argint(4,&fd) < 0 || argint(5,&offset) < 0)
+    return -1;
+
+  if((addr = mymmap(fd, addr, (uint64)len, prot, flags, offset)) == (uint64)-1)
+    return -1;
+  return addr;
+}
+
+uint64
+sys_munmap(void)
+{
+  uint64 addr;
+  int len;
+  if(argaddr(0, &addr) < 0 || argint(1, &len) < 0) return -1;
+
+  struct proc *p = myproc();
+  struct VMA *vma;
+  for(vma = p->head.vm_next; vma != &p->head; vma = vma->vm_next)
+    if(addr >= vma->vm_start && addr <= vma->vm_end) break;
+
+  pte_t *pte;
+  for(uint64 va = addr; va < addr + len; va += PGSIZE)
+  {
+    if((pte = walk(p->pagetable, va, 0)) == 0)
+      panic("munmap: walk");
+    if((*pte & PTE_V) == 0)
+      continue;
+    if(PTE_FLAGS(*pte) == PTE_V)
+      panic("munmap: not a leaf");
+    uint64 pa = PTE2PA(*pte);
+    kfree((void*)pa);
+    *pte = 0;
+  }
+
+  vma->vm_start = addr + len;
+  if(vma->vm_start == vma->vm_end)
+  {
+    vma->vm_next->vm_prev = vma->vm_prev;
+    vma->vm_prev->vm_next = vma->vm_next;
+    freeshare(vma);
+  }
+  return 0;
+}
+
+#else
+
+/* Part 4 / Part 5: 原有 mmap/munmap（数组式 vm_area） */
 uint64
 sys_mmap(void)
 {
@@ -584,52 +688,32 @@ sys_mmap(void)
      argint(4, &fd) < 0 || argaddr(5, &off) < 0)
     return -1;
 
-  // [WARNING #1] addr = 0
-
-  // If  addr  is  NULL, then the kernel chooses the (page-aligned) address 
-  // at which to create the mapping; this is
-  // the most portable method of creating a new mapping.
   if (start == 0) {
-    // 直接选择进程的末尾，注意这里要扩展进程自己的空间，否则copyin2会失败
     start = p->sz;
     p->sz += len;
-    //   growproc 调用 uvmalloc → kalloc × N → 映射零页。这些零页盖住了 mmap
-    // 的区域，后续访问不触发 PF，文件数据永远加载不上。                                                                     
-    // 所以不是"懒分配被破坏了"——是文件映射机制被完全绕过了。  
-    // growproc(len);
   }
-  // If addr is not NULL, then the kernel takes it as  a  hint
-  // about  where  to place the mapping; 
-  // on Linux, the kernel will pick a nearby page boundary 
   start = PGROUNDUP(start);
 
   if (len == 0) return -1;
   if (off % PGSIZE != 0) return -1;
 
-  // 如果是匿名映射
   if (flags & MAP_ANONYMOUS) {
-    // offset应该是0
     if (off != 0) return -1;
   } else {
-    // 关联到一个文件
     if (fd_get(fd, &f) != 0) return -1;
-    // 现在已经有file *f了
     if (f->type != FD_ENTRY) return -1;
   }
 
-  // 1. 申请一个 vm_area_struct 结构（vma），内核使用 vma 来管理进程的虚拟内存地址
   vma = alloc_vma(p);
   if (vma == NULL) return -1;
-  // 2. 设置 vma 结构各个字段的值。
   vma->start = start;
   vma->end = start + len;
   vma->prot = prot;
   vma->flags = flags;
   vma->offset = off;
   if (!(flags & MAP_ANONYMOUS)) {
-    // 处理文件计数
     vma->file = f;
-    filedup(f); // 增加引用计数
+    filedup(f);
   } else {
     vma->file = NULL;
   }
@@ -645,34 +729,23 @@ sys_munmap(void)
   struct proc *p = myproc();
   struct vm_area *vma;
 
-  if(argaddr(0, &start) < 0 || argaddr(1, &len) < 0) {
-    // printf("111\n");
+  if(argaddr(0, &start) < 0 || argaddr(1, &len) < 0)
     return -1;
-  }
 
-  // The address addr must be a multiple of the page size (but length need not be).
-  if (start % PGSIZE != 0) {
-    // printf("222\n");
+  if (start % PGSIZE != 0)
     return -1;
-  }
 
-  // **All** pages containing a part of the indicated range are unmapped, 
-  // and subsequent references to these pages will generate SIGSEGV. 
   len = PGROUNDUP(len);
   end = start + len;
 
-  // 1. 查找需要unmap的vma
   vma = find_vma(p, start);
-  if (vma == NULL) {/*printf("333\n");*/return -1;}
+  if (vma == NULL) return -1;
 
-  // 2. 如果是文件映射且是MAP_SHARED，需要先把内存中的数据写回文件
   if ((vma->flags & MAP_SHARED) && vma->file) {
-    // 遍历每一页，用ewrite写回
     for (uint64 addr = start; addr < end; addr += PGSIZE) {
       pte_t *pte = walk(p->pagetable, addr, 0);
       if (pte && (*pte & PTE_V)) {
         uint64 pa = PTE2PA(*pte);
-        // 这里没有PTE_D，就直接写回吧！
         uint64 file_offset = vma->offset + (addr - vma->start);
         elock(vma->file->ep);
         ewrite(vma->file->ep, 0, pa, file_offset, PGSIZE);
@@ -681,34 +754,28 @@ sys_munmap(void)
     }
   }
 
-  // 3. 释放物理内存并解除页表映射
   for (uint64 addr = start; addr < end; addr += PGSIZE) {
     pte_t *pte = walk(p->pagetable, addr, 0);
     if (pte && (*pte & PTE_V)) {
-      vmunmap(p->pagetable, addr, 1, 1); // 直接do_free=1吧！由于这里没有实现物理页的refcnt还不能判断
+      vmunmap(p->pagetable, addr, 1, 1);
     }
-    // 还有内核页表
     pte = walk(p->kpagetable, addr, 0);
     if (pte && (*pte & PTE_V)) {
-      vmunmap(p->pagetable, addr, 1, 0); // 内核和用户用的是同一个物理页，不能double free
+      vmunmap(p->pagetable, addr, 1, 0);
     }
   }
 
-  // 4. 释放文件引用
   if (vma->file) {
     fileclose(vma->file);
     vma->file = NULL;
   }
 
-  // 5. 释放vma
   vma->used = 0;
   p->vma_count--;
 
-    // printf("112221\n");
-
-
-  return 0;  
+  return 0;
 }
+#endif
 
 uint64
 sys_mkdirat(void)

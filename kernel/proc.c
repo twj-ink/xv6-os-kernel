@@ -180,6 +180,11 @@ found:
     p->vma[i].file = NULL;
   }
   p->vma_count = 0;
+#if defined(ALGO_FIFO) || defined(ALGO_LRU)
+  p->head.vm_next = &p->head;
+  p->head.vm_prev = &p->head;
+#endif
+
 
 #ifdef SCHEDULER_RR
   /* RR */
@@ -197,6 +202,9 @@ found:
   p->sleep_ticks = 0;
   p->runtime_ticks = 0;
 #endif
+
+  p->max_page_in_mem = 0;
+  p->page_swap_count = 0;
 
   return p;
 }

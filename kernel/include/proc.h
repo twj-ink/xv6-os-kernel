@@ -80,6 +80,11 @@ struct proc {
   /* vm */
   struct vm_area vma[MAX_VMA];  // VMA数组
   int vma_count;                // 已使用的VMA数量
+#if defined(ALGO_FIFO) || defined(ALGO_LRU)
+  struct VMA head;              // Part 6 链表式 VMA 头节点
+#endif
+  int max_page_in_mem;          // 单个进程最多能使用的mmap映射区域的页面数
+  int page_swap_count;          // 记录进程在mmap映射区域发生的换出行为次数
 
   /* scheduler */
 #ifdef SCHEDULER_RR
