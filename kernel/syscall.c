@@ -164,6 +164,10 @@ extern uint64 sys_set_max_page_in_mem(void);
 extern uint64 sys_get_swap_count(void);
 extern uint64 sys_lru_access_notify(void);
 #endif
+extern uint64 sys_sem_create(void);
+extern uint64 sys_sem_destroy(void);
+extern uint64 sys_sem_p(void);
+extern uint64 sys_sem_v(void);
 
 static uint64 (*syscalls[])(void) = {
   [SYS_fork]        sys_fork,
@@ -240,6 +244,10 @@ static uint64 (*syscalls[])(void) = {
   [SYS_get_swap_count] sys_get_swap_count,
   [SYS_lru_access_notify] sys_lru_access_notify,
 #endif
+  [SYS_sem_create]  sys_sem_create,
+  [SYS_sem_destroy] sys_sem_destroy,
+  [SYS_sem_p]       sys_sem_p,
+  [SYS_sem_v]       sys_sem_v,
 
 
 };

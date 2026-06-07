@@ -38,7 +38,8 @@ OBJS += \
   $K/plic.o \
   $K/console.o \
   $K/swap.o \
-  $K/vma_util.o
+  $K/vma_util.o \
+  $K/semaphore.o
 
 OBJS += \
   $K/virtio_disk.o \
@@ -78,6 +79,7 @@ CFLAGS += -D QEMU
 SCHEDULER_TYPE ?= RR
 ifeq ($(TYPE),)
 ifeq ($(ALGO),)
+ifeq ($(CASE),)
 
 # 根据调度器类型设置对应的测试程序
 ifeq ($(SCHEDULER_TYPE), RR)
@@ -125,6 +127,7 @@ endif
 
 # 支持外部传入的用户编译标志
 USER_CFLAGS += $(EXTRA_CFLAGS)
+endif
 endif
 endif
 ##### Part 4: 调度算法测试配置 #####
@@ -175,6 +178,29 @@ ifneq ($(ALGO),)
 	endif
 endif
 ##### Part 6: 页面置换算法测试配置 #####
+
+##### Part 8: ipc与信号量测试配置 #####
+CASE ?=
+
+ifneq ($(CASE),)
+	ifeq ($(CASE), MPMC)
+		override TEST_PROGRAM = test_ipc_producer_consumer
+		CFLAGS += -DTYPE_PRODUCER
+		USER_CFLAGS += -DTYPE_PRODUCER
+	else ifeq ($(CASE), PHILOSOPHER)
+		override TEST_PROGRAM = test_ipc_philosopher
+		CFLAGS += -DTYPE_PHILOSOPHER
+		USER_CFLAGS += -DTYPE_PHILOSOPHER
+	else
+		$(error Unknown IPC CASE: $(Case))
+	endif
+	CFLAGS += -DTEST_PROGRAM=\"$(TEST_PROGRAM)\"
+	USER_CFLAGS += -DTEST_PROGRAM=\"$(TEST_PROGRAM)\"
+	ifeq ($(ENABLE_JUDGER), 1)
+		USER_CFLAGS += -DENABLE_JUDGER=1
+	endif
+endif
+##### Part 8: ipc与信号量测试配置 #####
 
 LDFLAGS = -z max-page-size=4096
 

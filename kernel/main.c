@@ -14,6 +14,7 @@
 #include "include/proc.h"
 #include "include/plic.h"
 #include "include/swap.h"
+#include "include/semaphore.h"
 #include "include/vm.h"
 #include "include/disk.h"
 #include "include/buf.h"
@@ -43,6 +44,7 @@ main(unsigned long hartid, unsigned long dtb_pa)
     #endif
     kinit();         // physical page allocator
     swap_init();     // swap area for page replacement
+    semaphore_init();// semaphore for IPC
     kvminit();       // create kernel page table
     kvminithart();   // turn on paging
     timerinit();     // init a lock for timer

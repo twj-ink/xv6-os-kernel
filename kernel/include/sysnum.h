@@ -70,4 +70,9 @@
 #define SYS_set_max_page_in_mem 55557
 #define SYS_get_swap_count      55558
 #define SYS_lru_access_notify   55559
+
+#define SYS_sem_create  55560
+#define SYS_sem_destroy 55561
+#define SYS_sem_p       55562
+#define SYS_sem_v       55563
 #endif

@@ -27,5 +27,17 @@ int get_swap_count(void);
 int lru_access_notify(uint64 addr);
 #endif
 
+/* Part 6: IPC与信号量 */
+#if defined(TYPE_PRODUCER) || defined(TYPE_PHILOSOPHER)
+#include "kernel/include/types.h"
+#include "kernel/include/stat.h"
+#include "xv6-user/user.h"
+
+int sem_p(int);
+int sem_v(int);
+int sem_create(int);
+int sem_destroy(int);
+#endif
+
 #endif
 

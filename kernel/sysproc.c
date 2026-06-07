@@ -13,6 +13,7 @@
 
 #include "include/sbi.h"
 #include "include/vm.h"
+#include "include/semaphore.h"
 
 extern int exec(char *path, char **argv);
 extern uint ticks;
@@ -619,3 +620,9 @@ sys_lru_access_notify(void)
   return 0;
 }
 #endif
+
+// Part 8: 信号量系统调用
+uint64 sys_sem_create(void) { int v; if(argint(0,&v)<0) return -1; return sem_create(v); }
+uint64 sys_sem_destroy(void){ int i; if(argint(0,&i)<0) return -1; return sem_destroy(i); }
+uint64 sys_sem_p(void)     { int i; if(argint(0,&i)<0) return -1; return sem_p(i); }
+uint64 sys_sem_v(void)     { int i; if(argint(0,&i)<0) return -1; return sem_v(i); }

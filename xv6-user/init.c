@@ -92,6 +92,12 @@ void print_test_program(const char* program_name) {
 #elif defined(ALGO_LRU)
     printf("[LRU]");
     order = "2";
+#elif defined(TYPE_PRODUCER)
+    printf("[MPMC]");
+    order = "1";
+#elif defined(TYPE_PHILOSOPHER)
+    printf("[Philosopher Dining]");
+    order = "2";
 #else
     printf("Unknown");
 #endif
@@ -136,6 +142,37 @@ void run_scheduler_test(void) {
     }
     printf("Test%s %s\n", program_name, score ? "PASSED" : "FAILED");
     printf("SCORE: %d\n", score);
+
+#elif defined(TYPE_PRODUCER) || defined(TYPE_PHILOSOPHER)
+    // -------- Part 8: pipe + judger 框架 --------
+    print_test_program(program_name);
+    if (order[0]=='0') { exit(1); }
+    printf("init: starting [%s]\n", program_name);
+    int pipefd8[2] = {0, 0};
+    if(pipe(pipefd8) == -1) { printf("init: pipe failed\n"); exit(1); }
+    pid = fork();
+    if(pid < 0){ printf("init: fork failed\n"); close(pipefd8[0]); close(pipefd8[1]); exit(1); }
+    if(pid == 0){
+        close(pipefd8[0]); close(1); dup(pipefd8[1]); close(pipefd8[1]);
+        exec(program_name, argv);
+        printf("init: exec %s failed\n", program_name); exit(1);
+    }
+    close(pipefd8[1]);
+    int total8 = 0, chunk8;
+    while((chunk8 = read(pipefd8[0], test_outputs+total8, MAX_OUTPUT_SIZE-1-total8)) > 0)
+        total8 += chunk8;
+    test_outputs[total8] = '\0';
+    printf("testing output size:%d, contents:\n\n%s", total8, test_outputs);
+    close(pipefd8[0]);
+    wpid = wait(&status);
+    printf("\ninit: process pid=%d exited\n", wpid);
+    printf("\ninit: test execution completed, starting judger\n\n");
+    char *jargv8[4];
+    jargv8[0] = "judger"; jargv8[1] = order; jargv8[2] = test_outputs; jargv8[3] = 0;
+    pid = fork();
+    if(pid==0) { exec("judger", jargv8); printf("exec judger failed\n"); exit(1); }
+    wpid = wait(&status);
+    printf("\ninit: judger completed\n");
 
 #elif defined(ALGO_FIFO) || defined(ALGO_LRU)
     // -------- Part 6: pipe + judger 框架 --------
