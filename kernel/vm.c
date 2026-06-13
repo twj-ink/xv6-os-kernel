@@ -761,56 +761,37 @@ handle_page_fault(struct proc *p, uint64 va, int cause)
 
 #if defined(ALGO_FIFO) || defined(ALGO_LRU)
   if (vma6 != 0) {
-    // ====== Part 6: 链表 VMA 的 mmap 路径（含 swap） ======
     int page_idx = (a - vma6->vm_start) / PGSIZE;
 
-    // 若已换出则先换入
-    if (vma6->pages[page_idx].state == PAGE_STATE_SWAPPED)
+    if (vma6->pages[page_idx].state == PAGE_STATE_SWAPPED) {
+        // ====== 已在交换区：换入，然后保证不超限 ======
         swap_in6(p, vma6, page_idx);
 
-    // 统计当前在内存中的页数
+        int in_mem = 0;
+        for (int i = 0; i < vma6->npages; i++)
+            if (vma6->pages[i].state == PAGE_STATE_IN_MEM) in_mem++;
+
+        while (p->max_page_in_mem > 0 && in_mem > p->max_page_in_mem) {
+            int victim = select_victim_page6(vma6);
+            if (victim < 0 || victim == page_idx) break;
+            swap_out6(p, vma6, victim);
+            in_mem--;
+        }
+        return 0;
+    }
+
+    // ====== 首次访问：先确保不超限，再分配 ======
     int in_mem = 0;
     for (int i = 0; i < vma6->npages; i++)
         if (vma6->pages[i].state == PAGE_STATE_IN_MEM) in_mem++;
 
-    // 若已达上限且当前页尚未分配物理页，或是 swap_in 导致超限，换出一个 victim
-    while (p->max_page_in_mem > 0 && in_mem > p->max_page_in_mem) {
-        int victim = -1;
-        uint64 t = ~0ULL;
-        for (int i = 0; i < vma6->npages; i++) {
-            if (i == page_idx) continue;
-            if (vma6->pages[i].state != PAGE_STATE_IN_MEM) continue;
-#ifdef ALGO_FIFO
-            if (vma6->pages[i].entry_time < t) { t = vma6->pages[i].entry_time; victim = i; }
-#elif defined(ALGO_LRU)
-            if (vma6->pages[i].last_access < t) { t = vma6->pages[i].last_access; victim = i; }
-#endif
-        }
+    while (p->max_page_in_mem > 0 && in_mem >= p->max_page_in_mem) {
+        int victim = select_victim_page6(vma6);
         if (victim < 0) break;
         swap_out6(p, vma6, victim);
         in_mem--;
     }
-    if (p->max_page_in_mem > 0 && in_mem >= p->max_page_in_mem &&
-        vma6->pages[page_idx].state != PAGE_STATE_IN_MEM) {
-        int victim = -1;
-        uint64 t = ~0ULL;
-        for (int i = 0; i < vma6->npages; i++) {
-            if (i == page_idx) continue;
-            if (vma6->pages[i].state != PAGE_STATE_IN_MEM) continue;
-#ifdef ALGO_FIFO
-            if (vma6->pages[i].entry_time < t) { t = vma6->pages[i].entry_time; victim = i; }
-#elif defined(ALGO_LRU)
-            if (vma6->pages[i].last_access < t) { t = vma6->pages[i].last_access; victim = i; }
-#endif
-        }
-        if (victim >= 0) swap_out6(p, vma6, victim);
-    }
 
-    // 已经 IN_MEM（来自 swap_in 且没有超过限额被换出的情况）
-    if (vma6->pages[page_idx].state == PAGE_STATE_IN_MEM)
-        return 0;
-
-    // 分配物理页 + 映射
     perm = PTE_U;
     if (vma6->prot & PROT_READ)  perm |= PTE_R;
     if (vma6->prot & PROT_WRITE) perm |= PTE_W;
